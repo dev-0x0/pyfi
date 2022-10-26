@@ -112,6 +112,9 @@ class Blackout:
 
             # Deauth specific client from AP
             elif choice == '2':
+                horizontal_rule(30)
+                print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
+                
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()
 
@@ -198,9 +201,6 @@ class Blackout:
         horizontal_rule(30)
 
     def sniff_clients(self, pkt):
-
-        horizontal_rule(30)
-        print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
 
         # Go to correct channel
         channel = str(self.target_ap['channel'])
