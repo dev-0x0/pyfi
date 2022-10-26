@@ -14,6 +14,7 @@ import logging
 import pickle
 import argparse
 from time import sleep
+from turtle import color
 from utils import *
 from subprocess import Popen
 from multiprocessing import Process, Manager
@@ -197,6 +198,14 @@ class Blackout:
         horizontal_rule(30)
 
     def sniff_clients(self, pkt):
+
+        horizontal_rule(30)
+        print(f"{Colour.BOLD}Sniffing for client of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
+
+        # Go to correct channel
+        go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', self.target_ap['channel']], stdout=PIPE)
+        go_to_chan.communicate()
+
         # IF right type of frame, and not involved in authentication
         try:
             if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2): # and not pkt.haslayer(EAPOL):
