@@ -83,6 +83,9 @@ class Blackout:
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
 
+            print(f"{Colour.BOLD}Sniffing for Access Points on all channels...{Colour.ENDC}\n")
+            
+
             # Wait for processes to terminate
             self.proc_channel_hop.join()
             self.proc_sniff_ap.join()
@@ -301,7 +304,6 @@ class Blackout:
         # total of 13 channels to search through
         limit = 14
 
-        print(f"{Colour.BOLD}Channel hopping...{Colour.ENDC}")
         while True:
             for i in range(1, 14): 
                 channel = i % limit
