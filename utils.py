@@ -3,6 +3,7 @@ import re
 import os
 import sys
 import pickle
+from time import sleep
 from subprocess import PIPE, Popen
 
 
@@ -61,13 +62,29 @@ def start_mon(iface):
     """
     Put wireless network interface into monitor mode
     """
+
     try:
-        os.system(f"ifconfig {iface} down")
-        os.system("service NetworkManager stop")  # This service can revert wifi nic to managed mode
-        os.system(f"iw {iface} set type monitor")
-        os.system(f"ifconfig {iface} up")
+        print(f"Putting {iface} into MONITOR mode: ", end="")
+
+        # Ex: ip link set wlan0 down
+        iface_down = Popen(['ip', 'link', 'set', str(iface), 'down'])
+        sleep(2)
+        # Ex: iw wlan0 set monitor control
+        set_monitor_mode = Popen(['iw', str(iface), 'set', 'monitor', 'control'])
+        sleep(2)
+        # Ex: ip link set wlan0 up
+        iface_up = Popen(['ip', 'link', 'set', str(iface), 'up'])
+        sleep(2)
+        
+        iface_down.communicate()
+        set_monitor_mode.communicate()
+        iface_up.communicate()
+
+        print(f"{Colour.OKGREEN}SUCCESS{Colour.ENDC}")
+
     except Exception as e:
-        print(f"{Colour.WARNING}[!] Error putting {iface} into monitor mode.{Colour.ENDC}")
+        print(f"{Colour.WARNING}FAILED")
+        print(f"[!] Error putting {iface} into MONITOR mode.{Colour.ENDC}")
         print(f"{Colour.FAIL}[!] {e}{Colour.ENDC}")
         print("[-] Exiting...")
         sys.exit(0)
@@ -78,17 +95,18 @@ def stop_mon(iface):
     Put wireless network interface back into managed mode
     """
     try:
-        print(f"{Colour.OKGREEN}Resetting NIC...{Colour.ENDC}")
+        print(f"Putting {iface} back into MANAGED mode: ", end="")
         os.system(f"ifconfig {iface} down")
         os.system(f"iw {iface} set type managed")
         os.system(f"ifconfig {iface} up")
 
         # reconnect to any wifi network
         os.system("service NetworkManager restart")
-        print(f"{Colour.OKGREEN}[+] NIC Reset{Colour.ENDC}")
+        print(f"{Colour.OKGREEN}SUCCESS{Colour.ENDC}")
 
     except Exception as e:
-        print(f"{Colour.WARNING}[!] Error putting {iface} into managed mode.{Colour.ENDC}")
+        print(f"{Colour.WARNING}FAILED")
+        print(f"[!] Error putting {iface} into MANAGED mode.{Colour.ENDC}")
         print(f"{Colour.FAIL}[!] Error: {e}{Colour.ENDC}")
         sys.exit(0)
 
@@ -114,6 +132,6 @@ def choose_mode():
     choice = input("[*] Enter choice: ")
 
     while choice not in ('1', '2'):
-        print("[!] Please enter valid choice\n")
+        print("[!] Please enter a valid choice\n")
 
     return choice

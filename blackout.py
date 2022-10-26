@@ -31,6 +31,7 @@ BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
 class Blackout:
 
     def __init__(self, interface):
+
         # Set scapy sniff interface
         conf.iface = interface
 
@@ -57,12 +58,14 @@ class Blackout:
         # Make the process run in the background as a daemon
         self.proc_channel_hop.daemon = True
 
+
         # AP sniffer Process
         self.proc_sniff_ap = Process(
             target=sniff, kwargs={
                 'prn': self.sniff_access_points,
                 'iface': conf.iface,
                 'store': 0})
+
 
         # Client sniffer Process
         self.proc_sniff_clients = Process(
@@ -90,6 +93,7 @@ class Blackout:
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
+            
             # Important to make it upper for comparisons in self.sniff_clients
             self.target_bssid = self.target_ap['bssid'].upper()
 
@@ -261,6 +265,7 @@ class Blackout:
                         # Add Access-Point to the 'cross-process' dict
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel}
                         vendor = self.get_vendor(bssid)
+
                         # Output the catch
                         print(f"%2d)\t{Colour.OKBLUE}%-20s\t{Colour.OKGREEN}%-20s\t{Colour.ENDC}%2d\t\t%-20s" % (
                             count, ssid, bssid, channel, vendor))
@@ -297,14 +302,15 @@ class Blackout:
 
                 # using Popen instead of os.system here avoids superfluous
                 # output to the terminal from the iw command
-                # which at times can crash the program (I'm not sure why)
+                # which at times can crash the program (I'm not sure why yet)
                 # Note: I don't seem to need to PIPE any outputs(stdout etc.) for this to work
 
-                p = Popen(["iw", "dev", conf.iface, "set", "channel", str(channel)])
+                #print("{} - {}".format(conf.iface, type(conf.iface)))
+                p = Popen(["iw", "dev", str(conf.iface), "set", "channel", str(channel)])
                 try:
                     # effectively execute p
                     p.communicate()
-                    sleep(1)  # TODO -- Play with this number
+                    sleep(3)  # TODO -- Experiment with different values
                 except KeyboardInterrupt:
                     break
                 except Exception as e:
@@ -348,7 +354,7 @@ if __name__ == "__main__":
         blackout.run()
 
     except Exception as e:
-        print(f"[!] Error: {e}")
+        print(f"[!] Error running blackout.run(): {e}")
         sys.exit(0)
 
     except KeyboardInterrupt:
