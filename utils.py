@@ -73,7 +73,7 @@ def start_mon(iface):
 
         # Kill wpa_supplicant process if running
         out = check_output(['ps', '-ef'])
-        pid = [proc for pro in out.split(b'\n') if b'wpa_supplicant' in proc][0].split()[1].decode()
+        pid = [proc for proc in out.split(b'\n') if b'wpa_supplicant' in proc][0].split()[1].decode()
         if pid.isdigit():
             Popen(['kill', pid]).communicate()
 
