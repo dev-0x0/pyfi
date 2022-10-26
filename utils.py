@@ -4,7 +4,7 @@ import os
 import sys
 import pickle
 from time import sleep
-from subprocess import PIPE, Popen
+from subprocess import PIPE, Popen, check_output
 
 
 class Colour:
@@ -65,6 +65,17 @@ def start_mon(iface):
 
     try:
         print(f"Putting {iface} into MONITOR mode: ", end="")
+
+        # Need to kill any processes that my change channels or put interface back into MANAGED mode
+
+        # Stop NetworkManager service
+        Popen(['systemctl', 'stop', 'NetworkManager']).communicate()
+
+        # Kill wpa_supplicant process if running
+        out = check_output(['ps', '-ef'])
+        pid = [proc for proc out.split(b'\n') if b'wpa_supplicant' in proc][0].split()[1].decode()
+        if pid.isdigit():
+            Popen(['kill', pid]).communicate()
 
         # Ex: ip link set wlan0 down
         iface_down = Popen(['ip', 'link', 'set', str(iface), 'down'])
