@@ -200,10 +200,11 @@ class Blackout:
     def sniff_clients(self, pkt):
 
         horizontal_rule(30)
-        print(f"{Colour.BOLD}Sniffing for client of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
+        print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
 
         # Go to correct channel
-        go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', self.target_ap['channel']], stdout=PIPE)
+        channel = str(self.target_ap['channel'])
+        go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
         go_to_chan.communicate()
 
         # IF right type of frame, and not involved in authentication
