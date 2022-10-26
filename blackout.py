@@ -199,19 +199,22 @@ class Blackout:
     def sniff_clients(self, pkt):
         # IF right type of frame, and not involved in authentication
         try:
-            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type == 2 and not pkt.haslayer(EAPOL):
-                # Packet is a Data Frame
-                dst = pkt.getlayer(Dot11).addr1.upper()
-                src = pkt.getlayer(Dot11).addr2.upper()
+            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2): # and not pkt.haslayer(EAPOL):
+                # Packet is a Data or Control Frame
+                if pkt.addr1 and pkt.addr2:
 
-                # If the target AP is either source or destination, we know the other is a client
-                if src == self.target_bssid and dst not in self.ap_clients:
-                    self.ap_clients.append(dst)
-                    print(f"[*] {dst}\t{self.get_vendor(dst)}")
+                    # Get destination and source MAC addresses
+                    dst = pkt.addr1.upper()
+                    src = pkt.addr2.upper()
 
-                elif dst == self.target_bssid and src not in self.ap_clients:
-                    self.ap_clients.append(src)
-                    print(f"[*] {src}\t{self.get_vendor(src)}")
+                    # If the target AP is either source or destination, we know the other is a client
+                    if src == self.target_bssid and dst not in self.ap_clients:
+                        self.ap_clients.append(dst)
+                        print(f"[*] {dst}\t{self.get_vendor(dst)}")
+
+                    elif dst == self.target_bssid and src not in self.ap_clients:
+                        self.ap_clients.append(src)
+                        print(f"[*] {src}\t{self.get_vendor(src)}")
 
         except Exception as e:
             print(f"[*] sniff_clients error: {e}")
