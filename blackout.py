@@ -246,9 +246,12 @@ class Blackout:
         # has particular 'layers' of encapsulation
         # and act accordingly
 
+        print(f"{Colour.BOLD}Sniffing for Access Points...{Colour.ENDC}")
+
         if pkt.haslayer(Dot11):
             # Check for beacon frames or probe responses from AP's
             if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
+                print("Found interesting packeet...")
                 # If the packet contains a BSSID we have not encountered
                 if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
 
@@ -295,14 +298,14 @@ class Blackout:
         Hop channels until interrupted
         """
 
-        # total number of channels + 1 (14 channels to search through)
-        limit = 15
+        # total of 13 channels to search through
+        limit = 14
 
+        print(f"{Colour.BOLD}Channel hopping...{Colour.ENDC}")
         while True:
-            for i in range(1, 15):  # 10000 is arbitrary
+            for i in range(1, 14): 
                 channel = i % limit
-                if channel == 0:
-                    continue
+                #print(channel)
 
                 # using Popen instead of os.system here avoids superfluous
                 # output to the terminal from the iw command
