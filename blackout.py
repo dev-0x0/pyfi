@@ -9,7 +9,7 @@
 #  TODO: Use argparse for command-line options
 #       TODO: Allow option for number of deauth packets to send (EX: -c 100)
 #       TODO: Allow option for providing interface name
-#       TODO:
+#       TODO: SUPRABOUND TESTING...
 
 import os
 import re
@@ -89,8 +89,8 @@ class Blackout:
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
 
-            print(f"{Colour.BOLD}Sniffing for Access Points on all channels...{Colour.ENDC}\n")
-            print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}")
+            print(f"{Colour.BOLD}Sniffing for Access Points on all channels...{Colour.ENDC}")
+            print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
 
             # Wait for processes to terminate
             self.proc_channel_hop.join()
@@ -118,8 +118,8 @@ class Blackout:
             # Deauth specific client from AP
             elif choice == '2':
                 horizontal_rule(30)
-                print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
-                print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}")
+                print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...{Colour.ENDC}")
+                print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
 
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()

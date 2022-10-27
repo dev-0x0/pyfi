@@ -138,8 +138,9 @@ def print_headers(self):
 
 
 def choose_mode():
+    print('\n')
     print("1) Deauthenticate ALL clients from AP")
-    print("2) Deauthenticate specific client from AP (sniff clients)")
+    print("2) Deauthenticate specific client from AP (sniff clients)\n")
     choice = input("[*] Enter choice: ")
 
     while choice not in ('1', '2'):
