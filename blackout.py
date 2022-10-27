@@ -22,7 +22,8 @@ from time import sleep
 from turtle import color
 from utils import *
 from subprocess import Popen
-from multiprocessing import Process, Manager
+from threading import Thread
+#from multiprocessing import Process, Manager
 from scapy.all import *
 
 # set scapy verbosity to zero
@@ -49,47 +50,45 @@ class Blackout:
         # Compile list of vendors
         self.vendors = compile_vendors()
 
-        # see multiprocessing.Manager
-        self.proc_manager = Manager()
-
-        # These data structures are shared between Processes created with
-        # multiprocessing.Process, and the Process we start
-        # the program in, as is my understanding.
-        self.ap_dict = self.proc_manager.dict()
-        self.all_bssid = self.proc_manager.list()
-        self.ap_clients = self.proc_manager.list()
+        self.ap_dict = dict()
+        self.all_bssid = list()
+        self.ap_clients = list()
 
         # Declare some necessary variables
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
 
-        # Channel hopping process
-        self.proc_channel_hop = Process(target=Blackout.channel_hop, args=(conf.iface,))
-        # Make the process run in the background as a daemon
-        self.proc_channel_hop.daemon = True
+        # Channel hopping thread
+        self.thread_channel_hop = Thread(target=Blackout.channel_hop, args=(conf.iface,))
+        # Make the thread run in the background as a daemon
+        self.thread_channel_hop.daemon = True
 
 
-        # AP sniffer Process
-        self.proc_sniff_ap = Process(
+        # AP sniffer Thread
+        self.thread_sniff_ap = Thread(
             target=sniff, kwargs={
                 'prn': self.sniff_access_points,
                 'iface': conf.iface,
                 'store': 0})
 
 
-        # Client sniffer Process
-        self.proc_sniff_clients = Process(
+        # Client sniffer Thread
+        self.thread_sniff_clients = Thread(
             target=sniff,
             kwargs={
                 'prn': self.sniff_clients,
                 'iface': conf.iface,
                 'store': 0})
 
-    def refresh(self):
+    def write_window(self, window, y, x, text, attr):
         #self.stdscr.noutrefresh()
-        self.sniffer_window.noutrefresh()
-        self.control_window.noutrefresh()
+        if x and y:
+            window.addstr(y, x, text, attr)
+        else:
+            window.addstr(text)
+
+        window.noutrefresh()
         curses.doupdate()
 
     def run(self):
@@ -99,25 +98,20 @@ class Blackout:
 
         try:
             start_mon(conf.iface, self.control_window)
-            self.proc_channel_hop.start()
 
-            self.sniffer_window.addstr(1, 1, "Sniffing for Access Points on all channels...", curses.A_BOLD)
-            #self.sniffer_window.addstr(2, 1, f"{ColoPress Ctrl-c to select target")
-            self.refresh()
-
-            sleep(10)
-            sys.exit(0)
+            # Start daemon thread
+            self.thread_channel_hop.start()
+            self.write_window(self.sniffer_window, 1, 2, "[+] Sniffing for Access Points on all channels...", curses.A_BOLD)
 
             # Sniff for Wireless Access Points
-            self.proc_sniff_ap.start()
+            self.thread_sniff_ap.start()
 
             # Wait for processes to terminate
-            self.proc_channel_hop.join()
-            self.proc_sniff_ap.join()
+            self.thread_sniff_ap.join()
 
             # Output a very simple summary of findings
-            horizontal_rule(30)
-            print(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n")
+            horizontal_rule(30, self.control_window)
+            self.write_windows(self.control_window, 1, 2, f"\nAccess Points discovered: {len(self.ap_dict)}\n\n")
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
@@ -137,8 +131,8 @@ class Blackout:
             # Deauth specific client from AP
             elif choice == '2':
                 horizontal_rule(30)
-                print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...{Colour.ENDC}")
-                print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
+                self.window_write(self.control_windows, f"Sniffing for clients of AP - {self.target_ap['bssid']}...")
+               # print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
 
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()
@@ -292,7 +286,8 @@ class Blackout:
                 
                 # If the packet contains a BSSID we have not encountered
                 if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
-
+                    self.sniffer_window.addstr("\nFound a packet!\n")
+                    self.refresh()
                     bssid = pkt.addr3.upper()  # add the bssid to our bssid list
                     self.all_bssid.append(bssid)
 
@@ -312,14 +307,19 @@ class Blackout:
                         vendor = self.get_vendor(bssid)
 
                         # Output the catch
-                        print(f"%2d)\t{Colour.OKBLUE}%-20s\t{Colour.OKGREEN}%-20s\t{Colour.ENDC}%2d\t\t%-20s" % (
-                            count, ssid, bssid, channel, vendor))
+                        #self.sniffer_window.addstr(f"%2d)\t{Colour.OKBLUE}%-20s\t{Colour.OKGREEN}%-20s\t{Colour.ENDC}%2d\t\t%-20s\n" % (
+                        #    count, ssid, bssid, channel, vendor))
+                        self.sniffer_window.erase()
+                        self.sniffer_window.addstr(1, 1, f"{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
+                        self.refresh()
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            print(f"[!] Sniffer Error: {e}")
+                            self.control_window.erase()
+                            self.control_window.addstr(f"[!] Sniffer Error: {e}")
+                            self.refresh()
 
     def get_vendor(self, bssid):
         name = ""
@@ -385,6 +385,11 @@ class Blackout:
             self.proc_sniff_clients.join()
         except Exception:
             pass
+        finally:
+            curses.nocbreak()
+            stdscr.keypad(False)
+            curses.echo()
+            curses.endwin()
 
 
 if __name__ == "__main__":
@@ -393,7 +398,7 @@ if __name__ == "__main__":
     stdscr = curses.initscr()
     curses.noecho()
     curses.cbreak()
-    curses.curs_set(0)
+    #curses.curs_set(0)
     stdscr.keypad(True)
 
     curses.start_color()

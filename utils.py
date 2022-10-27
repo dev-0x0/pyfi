@@ -20,8 +20,11 @@ class Colour:
     UNDERLINE = '\033[4m'
 
 
-def horizontal_rule(n):
-    print("-" * n)
+def horizontal_rule(n, window):
+    window.addstr("-" * n)
+    window.addstr("\n")
+    window.noutrefresh()
+    curses.doupdate()
 
 
 def self_mac(iface):
@@ -60,13 +63,15 @@ def get_mac(iface):
     return mac
 
 
-def start_mon(iface, control_window):
+def start_mon(iface, window):
     """
     Put wireless network interface into monitor mode
     """
 
     try:
-        control_window.addstr(1, 1, f"Putting {iface} into MONITOR mode)", curses.A_NORMAL)
+        window.addstr(1, 2, f"[+] Putting {iface} into MONITOR mode", curses.A_NORMAL)
+        window.noutrefresh()
+        curses.doupdate()
 
         # Need to kill any processes that my change channels or put interface back into MANAGED mode
 
@@ -92,8 +97,6 @@ def start_mon(iface, control_window):
         iface_down.communicate()
         set_monitor_mode.communicate()
         iface_up.communicate()
-
-        control_window.addstr(2, 1, "SUCCESS", curses.A_NORMAL)
 
     except Exception as e:
         #print(f"{Colour.WARNING}FAILED")
