@@ -9,14 +9,14 @@
 #  TODO: Use argparse for command-line options
 #       TODO: Allow option for number of deauth packets to send (EX: -c 100)
 #       TODO: Allow option for providing interface name
-#       TODO: SUPRABOUND TESTING...
 
 import os
 import re
 import sys
 import signal
-import logging
+import curses
 import pickle
+import logging
 import argparse
 from time import sleep
 from turtle import color
@@ -36,7 +36,12 @@ BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
 
 class Blackout:
 
-    def __init__(self, interface):
+    def __init__(self, interface, stdscr, sniffer_window, control_window):
+
+        # Set curses screen object
+        self.stdscr = stdscr
+        self.sniffer_window = sniffer_window
+        self.control_window = control_window
 
         # Set scapy sniff interface
         conf.iface = interface
@@ -81,16 +86,30 @@ class Blackout:
                 'iface': conf.iface,
                 'store': 0})
 
+    def refresh(self):
+        #self.stdscr.noutrefresh()
+        self.sniffer_window.noutrefresh()
+        self.control_window.noutrefresh()
+        curses.doupdate()
+
     def run(self):
+
+        # clear screen
+        self.stdscr.clear()
+
         try:
-            start_mon(conf.iface)
+            start_mon(conf.iface, self.control_window)
             self.proc_channel_hop.start()
+
+            self.sniffer_window.addstr(1, 1, "Sniffing for Access Points on all channels...", curses.A_BOLD)
+            #self.sniffer_window.addstr(2, 1, f"{ColoPress Ctrl-c to select target")
+            self.refresh()
+
+            sleep(10)
+            sys.exit(0)
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
-
-            print(f"{Colour.BOLD}Sniffing for Access Points on all channels...{Colour.ENDC}")
-            print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
 
             # Wait for processes to terminate
             self.proc_channel_hop.join()
@@ -134,7 +153,6 @@ class Blackout:
 
         except Exception as e:
             print(f"[!] Error: {e}")
-            sys.exit(0)
 
         except KeyboardInterrupt:
             pass
@@ -149,7 +167,6 @@ class Blackout:
             #         f.write(f"{k} | {v[1]} | {v[2]}\n")
 
             # END
-            sys.exit(0)
 
     @staticmethod
     def deauth(bssid, channel, target):
@@ -269,12 +286,10 @@ class Blackout:
         # has particular 'layers' of encapsulation
         # and act accordingly
 
-        print(f"{Colour.BOLD}Sniffing for Access Points...{Colour.ENDC}")
-
         if pkt.haslayer(Dot11):
             # Check for beacon frames or probe responses from AP's
             if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
-                print("Found interesting packeet...")
+                
                 # If the packet contains a BSSID we have not encountered
                 if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
 
@@ -374,7 +389,36 @@ class Blackout:
 
 if __name__ == "__main__":
 
-    blackout = Blackout("wlan0")
+    # Setup curses
+    stdscr = curses.initscr()
+    curses.noecho()
+    curses.cbreak()
+    curses.curs_set(0)
+    stdscr.keypad(True)
+
+    curses.start_color()
+
+    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE) #color pair 1
+    highlightText = curses.color_pair(1) #color pair for highlighted menu option
+    normalText = curses.A_NORMAL #color pair for non-highlighted menu options
+
+    HEIGHT, WIDTH = stdscr.getmaxyx()
+
+    sniffer_window = curses.newwin(int(HEIGHT/2)-1, WIDTH-2, 1, 1)
+    sniffer_window.border('|', '|', '-', '-', '+', '+', '+', '+')
+    
+    control_window = curses.newwin(int(HEIGHT/2)-1, WIDTH-2, int(HEIGHT/2), 1)
+    control_window.border('|', '|', '-', '-', '+', '+', '+', '+')
+
+    sniffer_window.addstr(0, 2, "Sniffer Output", curses.A_NORMAL)
+    control_window.addstr(0, 2, "Control", curses.A_NORMAL)
+    
+    stdscr.noutrefresh()
+    sniffer_window.noutrefresh()
+    control_window.noutrefresh()
+    curses.doupdate()
+
+    blackout = Blackout("wlan0", stdscr, sniffer_window, control_window)
 
     # Set the signal handler
     signal.signal(signal.SIGINT, blackout.signal_handler)
@@ -384,9 +428,14 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f"[!] Error running blackout.run(): {e}")
-        sys.exit(0)
 
     except KeyboardInterrupt:
         pass
+
+    finally:
+        curses.nocbreak()
+        stdscr.keypad(False)
+        curses.echo()
+        curses.endwin()
 
 

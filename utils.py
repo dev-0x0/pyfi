@@ -1,8 +1,10 @@
 
+from curses import A_NORMAL
 import re
 import os
 import sys
 import pickle
+import curses
 from time import sleep
 from subprocess import PIPE, Popen, check_output
 
@@ -58,13 +60,13 @@ def get_mac(iface):
     return mac
 
 
-def start_mon(iface):
+def start_mon(iface, control_window):
     """
     Put wireless network interface into monitor mode
     """
 
     try:
-        print(f"Putting {iface} into MONITOR mode: ", end="")
+        control_window.addstr(1, 1, f"Putting {iface} into MONITOR mode)", curses.A_NORMAL)
 
         # Need to kill any processes that my change channels or put interface back into MANAGED mode
 
@@ -91,10 +93,10 @@ def start_mon(iface):
         set_monitor_mode.communicate()
         iface_up.communicate()
 
-        print(f"{Colour.OKGREEN}SUCCESS{Colour.ENDC}")
+        control_window.addstr(2, 1, "SUCCESS", curses.A_NORMAL)
 
     except Exception as e:
-        print(f"{Colour.WARNING}FAILED")
+        #print(f"{Colour.WARNING}FAILED")
         print(f"[!] Error putting {iface} into MONITOR mode.{Colour.ENDC}")
         print(f"{Colour.FAIL}[!] {e}{Colour.ENDC}")
         print("[-] Exiting...")
