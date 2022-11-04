@@ -115,7 +115,7 @@ class Blackout:
 
             # Output a very simple summary of findings
             self.utils.horizontal_rule(30)
-            self.write_window(1, 2, f"\nAccess Points discovered: {len(self.ap_dict)}\n\n")
+            self.write_window(1, 2, f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
@@ -150,7 +150,7 @@ class Blackout:
                     self.target_client)
 
         except Exception as e:
-            self.write_window("blackout.run: {}".format(e))
+            self.write_window(1, 5, "blackout.run: {}".format(e), curses.A_NORMAL)
             Utils.log_error_to_file(e)
 
         except KeyboardInterrupt:
