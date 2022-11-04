@@ -22,7 +22,8 @@ from time import sleep
 from turtle import color
 from utils import *
 from subprocess import Popen
-from multiprocessing import Process, Manager
+from threading import Thread
+#from multiprocessing import Process, Manager
 from scapy.all import *
 
 # set scapy verbosity to zero
@@ -45,36 +46,39 @@ class Blackout:
         self.vendors = compile_vendors()
 
         # see multiprocessing.Manager
-        self.proc_manager = Manager()
+        #self.proc_manager = Manager()
 
         # These data structures are shared between Processes created with
         # multiprocessing.Process, and the Process we start
         # the program in, as is my understanding.
-        self.ap_dict = self.proc_manager.dict()
-        self.all_bssid = self.proc_manager.list()
-        self.ap_clients = self.proc_manager.list()
+        # self.ap_dict = self.proc_manager.dict()
+        # self.all_bssid = self.proc_manager.list()
+        # self.ap_clients = self.proc_manager.list()
+        self.ap_dict = dict()
+        self.all_bssid = list()
+        self.ap_clients = list()
 
         # Declare some necessary variables
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
 
-        # Channel hopping process
-        self.proc_channel_hop = Process(target=Blackout.channel_hop, args=(conf.iface,))
-        # Make the process run in the background as a daemon
-        self.proc_channel_hop.daemon = True
+        # Channel hopping thread
+        self.thread_channel_hop = Thread(target=Blackout.channel_hop, args=(conf.iface,))
+        # Make the thread run in the background as a daemon
+        self.thread_channel_hop.daemon = True
 
 
-        # AP sniffer Process
-        self.proc_sniff_ap = Process(
+        # AP sniffer Thread
+        self.thread_sniff_ap = Thread(
             target=sniff, kwargs={
                 'prn': self.sniff_access_points,
                 'iface': conf.iface,
                 'store': 0})
 
 
-        # Client sniffer Process
-        self.proc_sniff_clients = Process(
+        # Client sniffer Thread
+        self.thread_sniff_clients = Thread(
             target=sniff,
             kwargs={
                 'prn': self.sniff_clients,
@@ -84,17 +88,19 @@ class Blackout:
     def run(self):
         try:
             start_mon(conf.iface)
-            self.proc_channel_hop.start()
+
+            # Start daemon thread
+            self.thread_channel_hop.start()
 
             # Sniff for Wireless Access Points
-            self.proc_sniff_ap.start()
+            self.thread_sniff_ap.start()
 
             print(f"{Colour.BOLD}Sniffing for Access Points on all channels...{Colour.ENDC}\n")
             print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}")
 
             # Wait for processes to terminate
-            self.proc_channel_hop.join()
-            self.proc_sniff_ap.join()
+            self.thread_channel_hop.join()
+            self.thread_sniff_ap.join()
 
             # Output a very simple summary of findings
             horizontal_rule(30)
@@ -121,8 +127,8 @@ class Blackout:
                 print(f"{Colour.BOLD}Sniffing for clients of AP - {self.target_ap['bssid']}...\n{Colour.ENDC}")
                 print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}")
 
-                self.proc_sniff_clients.start()
-                self.proc_sniff_clients.join()
+                self.thread_sniff_clients.start()
+                self.thread_sniff_clients.join()
 
                 self.list_clients()
                 self.select_target_client()
@@ -354,20 +360,20 @@ class Blackout:
         sleep(1)
 
         try:
-            self.proc_channel_hop.terminate()
-            self.proc_channel_hop.join()
+            self.thread_channel_hop.terminate()
+            self.thread_channel_hop.join()
         except Exception:
             pass
 
         try:
-            self.proc_sniff_ap.terminate()
-            self.proc_sniff_ap.join()
+            self.thread_sniff_ap.terminate()
+            self.thread_sniff_ap.join()
         except Exception:
             pass
 
         try:
-            self.proc_sniff_clients.terminate()
-            self.proc_sniff_clients.join()
+            self.thread_sniff_clients.terminate()
+            self.thread_sniff_clients.join()
         except Exception:
             pass
 
