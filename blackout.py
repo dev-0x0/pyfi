@@ -149,7 +149,8 @@ class Blackout:
                 self.exit_application('thread')
             
             elif user_input == ord(' '):
-                self.display_update_event.clear()
+                #self.display_update_event.clear()
+                self.output_queue.join()
                 self.show_summary()
 
             
