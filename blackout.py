@@ -435,6 +435,7 @@ class Blackout:
             # If all flags are True, exit the application
             if all(flag for _, flag in self.procs_flags):
 
+                self.to_window("ALL FLAGS TRUE")
                 #TODO return string from function and print that instead
                 self.utils.stop_mon()
 
