@@ -156,7 +156,7 @@ class Blackout:
         self.window.erase()
         self.refresh_screen()
 
-        for _, line in self.main_display:
+        for line in self.main_display:
             self.to_window(line)
 
         self.refresh_screen()
