@@ -132,9 +132,7 @@ class Blackout:
 
     def fetch_output(self):
         while self.ap_update_event.is_set():
-            if not self.output_queue.empty():
-                # If False, we are done retrieving sniffed information
-                self.main_display.append(self.output_queue.get())
+            self.main_display.append(self.output_queue.get())
 
     
     def fetch_input(self):
@@ -147,7 +145,6 @@ class Blackout:
             elif user_input == ord('s'):
                 if self.ap_update_event.is_set():
                     self.ap_update_event.clear()
-                    self.show_summary()
                 elif self.client_update_event.is_set():
                     self.client_update_event.clear()
 
@@ -241,7 +238,7 @@ class Blackout:
             while self.ap_update_event.is_set():
                 pass
 
-            # Select an target AP
+            self.show_summary()
             self.target_ap = self.select_target_ap()
             
             # Make it all upper-case for comparisons in self.sniff_clients
