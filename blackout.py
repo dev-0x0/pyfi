@@ -199,7 +199,7 @@ class Blackout:
     def start_threads(self):
         # Start daemon threads
         self.thread_channel_hop.start()
-        self.output_thread.start()
+        #self.output_thread.start()
         self.input_thread.start()
 
     # Sniffer methods
@@ -449,7 +449,7 @@ class Blackout:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            self.output_queue.put("[!] Sniffer Error: {e}\n")
+                            #self.output_queue.put("[!] Sniffer Error: {e}\n")
                             Utils.log_error_to_file(traceback.format_exc())
                             
 
