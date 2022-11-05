@@ -127,8 +127,8 @@ class Blackout:
 
     def fetch_output(self):
         while True:
-            if self.event.is_set():
-                break
+            # if self.event.is_set():
+            #     break
 
             if not self.output_queue.empty():
                 output = self.output_queue.get()
@@ -138,8 +138,8 @@ class Blackout:
     
     def fetch_input(self):
         while True:
-            if self.event.is_set():
-                break
+            # if self.event.is_set():
+            #     break
 
             user_input = self.stdscr.getch()
 
@@ -187,7 +187,6 @@ class Blackout:
         self.thread_channel_hop.start()
         self.output_thread.start()
         self.input_thread.start()
-        self.found_thread.start()
 
 
     # Sniffer methods
