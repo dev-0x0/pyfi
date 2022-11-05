@@ -61,7 +61,6 @@ class Blackout:
         self.target_client = None
 
         # Thread Events for stopping threads
-        self.event_channel_hop = Event()
         self.event_sniff_ap = Event()
         self.event_sniff_clients = Event()
         self.event_deauth = Event()
@@ -93,8 +92,7 @@ class Blackout:
 
         # All threads and their events
         # (thread, event)
-        self.threads_events = ( 
-            (self.thread_channel_hop, self.event_channel_hop),
+        self.threads_events = (
             (self.thread_sniff_ap, self.event_sniff_ap),
             (self.thread_sniff_clients, self.event_sniff_clients))
 
@@ -136,17 +134,21 @@ class Blackout:
             while True:
                 c = self.stdscr.getch()
                 if c == ord('q'):
-                    for _, event in self.threads_events:
-                        event.set()
-                    raise KeyboardInterrupt
-                if c == ord(' '):
-                    self.event_channel_hop.set()
-                    self.event_sniff_ap.set()
-                    self.write_window("[+] You pressed SPACE....")
+                    for thread, _ in self.threads_events:
+                        # Terminate ALL threads and exit
+                        thread.terminate()
+                        thread.join()
+                    
                     raise KeyboardInterrupt
 
+                if c == ord(' '):
+                    # Terminate AP sniffer thread
+                    # Move to target selection phase
+                    self.write_window("[+] You pressed SPACE....")
+                    break
+
             # Wait for processes to terminate
-            self.thread_sniff_ap.join()
+            #self.thread_sniff_ap.join()
 
             # Output a very simple summary of findings
             self.utils.horizontal_rule(30)
@@ -355,6 +357,7 @@ class Blackout:
                             Utils.log_error_to_file(traceback.format_exc())
                             
 
+    # TODO move to utils
     def get_vendor(self, bssid):
         name = ""
         try:
@@ -364,7 +367,7 @@ class Blackout:
 
         return name
 
-
+    # TODO move to utils
     @staticmethod
     def channel_hop(iface):
         """
@@ -406,28 +409,15 @@ class Blackout:
 
         try:
 
-            for thread, event in self.threads_events:
-                if thread.is_alive and event.is_set():
-                    thread.terminate()
-                    thread.join()
-
-            # if self.proc_channel_hop.is_alive() and self.event_channel_hop.is_set():
-            #     self.proc_channel_hop.terminate()
-            #     self.proc_channel_hop.join()
-            #     self.write_window("[+] Terminated channel_hop...", curses.A_BOLD)
-
-            # if self.proc_sniff_ap.is_alive() and self.event_sniff_ap.is_set():
-            #     self.proc_sniff_ap.terminate()
-            #     self.proc_sniff_ap.join()
-            #     self.write_window("[+] Terminated sniff_ap...", curses.A_BOLD)
-
-            # if self.proc_sniff_clients.is_alive() and self.event_sniff_clients.is_set():
-            #     self.proc_sniff_clients.terminate()
-            #     self.proc_sniff_clients.join()
-            #     self.write_window("[+] Terminated sniff_clients...", curses.A_BOLD)
-
-        except Exception:
-            pass
+            # Check if all threads are terminated
+            if all(thread.isAlive() == False for thread, _ in self.threads_events):
+                # If so, set all thread events
+                self.write_window("[!] Quitting...\n")
+                for _, event in self.threads_events:
+                    event.set()
+                
+        except Exception as e:
+            Utils.log_error_to_file(e)
 
         finally:
 
@@ -435,13 +425,15 @@ class Blackout:
 
                 self.utils.stop_mon()
 
-                sleep(5)
+                sleep(3)
 
                 # End curses
                 curses.nocbreak()
                 stdscr.keypad(False)
                 curses.echo()
                 curses.endwin()
+
+                # Exit
                 sys.exit(0)
 
 
