@@ -22,7 +22,7 @@ import traceback
 from time import sleep
 from utils import Utils
 from subprocess import Popen, PIPE
-from threading import Thread
+from threading import Thread, Event
 #from multiprocessing import Process, Manager
 from scapy.all import *
 
@@ -60,6 +60,12 @@ class Blackout:
         self.target_bssid = None
         self.target_client = None
 
+        # Thread Events for stopping threads
+        self.event_channel_hop = Event()
+        self.event_sniff_ap = Event()
+        self.event_sniff_clients = Event()
+        self.event_deauth = Event()
+
         # Channel hopping thread
         self.thread_channel_hop = Thread(
             target=Blackout.channel_hop,
@@ -85,6 +91,14 @@ class Blackout:
                 'iface': conf.iface,
                 'store': 0})
 
+        # All threads and their events
+        # (thread, event)
+        self.threads_events = ( 
+            (self.thread_channel_hop, self.event_channel_hop),
+            (self.thread_sniff_ap, self.event_sniff_ap),
+            (self.thread_sniff_clients, self.event_sniff_clients))
+
+
     def write_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
 
         if y and x:
@@ -100,6 +114,7 @@ class Blackout:
         self.window.noutrefresh()
         curses.doupdate()
 
+
     def run(self):
 
         # clear screen
@@ -110,10 +125,25 @@ class Blackout:
 
             # Start daemon thread
             self.thread_channel_hop.start()
-            self.write_window("[+] Sniffing for Access Points on all channels...\n", curses.A_BOLD)
+            self.stdscr.clear()
+            self.write_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
+            self.write_windows("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
 
             # Sniff for Wireless Access Points
             self.thread_sniff_ap.start()
+
+            # Get user input with curses
+            while True:
+                c = self.stdscr.getch()
+                if c == ord('q'):
+                    for _, event in self.threads_events:
+                        event.set()
+                    raise KeyboardInterrupt
+                if c == ord(' '):
+                    self.event_channel_hop.set()
+                    self.event_sniff_ap.set()
+                    self.write_window("[+] You pressed SPACE....")
+                    raise KeyboardInterrupt
 
             # Wait for processes to terminate
             self.thread_sniff_ap.join()
@@ -165,6 +195,7 @@ class Blackout:
             # Put network card back into managed mode
             self.utils.stop_mon()
 
+
     def deauth(self, bssid, channel, target):
         """
         create deauth packets and send them to the target AP
@@ -206,6 +237,7 @@ class Blackout:
         except Exception as e:
             print(f"[!] Error while Deauthenticating: {e}")
 
+
     def select_target_client(self):
         self.utils.horizontal_rule(30)
 
@@ -218,6 +250,7 @@ class Blackout:
         self.utils.horizontal_rule(30)
         print(f"\nTargeting Client: [{self.target_client}]\n")
         self.utils.horizontal_rule(30)
+
 
     def sniff_clients(self, pkt):
 
@@ -249,6 +282,7 @@ class Blackout:
         except Exception as e:
             print(f"[*] sniff_clients error: {e}")
 
+
     def list_clients(self):
         print("\n")
         self.utils.horizontal_rule(20)
@@ -256,6 +290,7 @@ class Blackout:
             # Find manufacturer
             name = self.get_vendor(client)
             print(f"{i + 1}) {client}\t{name}")
+
 
     def select_target_ap(self):
         self.utils.horizontal_rule(30)
@@ -273,6 +308,7 @@ class Blackout:
         self.utils.horizontal_rule(30)
 
         return target_ap
+
 
     def sniff_access_points(self, pkt):
         """
@@ -328,6 +364,7 @@ class Blackout:
 
         return name
 
+
     @staticmethod
     def channel_hop(iface):
         """
@@ -358,6 +395,7 @@ class Blackout:
                 except Exception as e:
                     pass
 
+
     def signal_handler(self, sig, stack_frame):
         """
         This handles an interrupt signal, like
@@ -367,37 +405,44 @@ class Blackout:
         sleep(1)
 
         try:
-            self.proc_channel_hop.terminate()
-            self.proc_channel_hop.join()
-            self.write_window("[+] Terminated channel_hop...", curses.A_BOLD)
-        except Exception:
-            pass
 
-        try:
-            self.proc_sniff_ap.terminate()
-            self.proc_sniff_ap.join()
-            self.write_window("[+] Terminated sniff_ap...", curses.A_BOLD)
-        except Exception:
-            pass
+            for thread, event in self.threads_events:
+                if thread.is_alive and event.is_set():
+                    thread.terminate()
+                    thread.join()
 
-        try:
-            self.proc_sniff_clients.terminate()
-            self.proc_sniff_clients.join()
-            self.write_window("[+] Terminated sniff_clients...", curses.A_BOLD)
+            # if self.proc_channel_hop.is_alive() and self.event_channel_hop.is_set():
+            #     self.proc_channel_hop.terminate()
+            #     self.proc_channel_hop.join()
+            #     self.write_window("[+] Terminated channel_hop...", curses.A_BOLD)
+
+            # if self.proc_sniff_ap.is_alive() and self.event_sniff_ap.is_set():
+            #     self.proc_sniff_ap.terminate()
+            #     self.proc_sniff_ap.join()
+            #     self.write_window("[+] Terminated sniff_ap...", curses.A_BOLD)
+
+            # if self.proc_sniff_clients.is_alive() and self.event_sniff_clients.is_set():
+            #     self.proc_sniff_clients.terminate()
+            #     self.proc_sniff_clients.join()
+            #     self.write_window("[+] Terminated sniff_clients...", curses.A_BOLD)
+
         except Exception:
             pass
 
         finally:
-            self.utils.stop_mon()
 
-            sleep(5)
+            if all(event.is_set() for _, event in self.threads_events):
 
-            # # End curses
-            curses.nocbreak()
-            stdscr.keypad(False)
-            curses.echo()
-            curses.endwin()
-            sys.exit(0)
+                self.utils.stop_mon()
+
+                sleep(5)
+
+                # End curses
+                curses.nocbreak()
+                stdscr.keypad(False)
+                curses.echo()
+                curses.endwin()
+                sys.exit(0)
 
 
 if __name__ == "__main__":
@@ -409,11 +454,13 @@ if __name__ == "__main__":
     #curses.curs_set(0)
     stdscr.keypad(True)
 
+    # Use all the colours!
+    # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
     curses.start_color()
+    curses.use_default_colors()
+    for i in range(0, curses.COLORS):
+        curses.init_pair(i + 1, i, -1)
 
-    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE) #color pair 1
-    #highlightText = curses.color_pair(1) #color pair for highlighted menu option
-    #normalText = curses.A_NORMAL #color pair for non-highlighted menu options
 
     HEIGHT, WIDTH = stdscr.getmaxyx()
 
@@ -441,13 +488,12 @@ if __name__ == "__main__":
         pass
 
     finally:
-
-        #c = stdscr.getch()
-
         # End curses
         curses.nocbreak()
         stdscr.keypad(False)
         curses.echo()
         curses.endwin()
+
+        sys.exit(0)
 
 
