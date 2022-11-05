@@ -88,7 +88,7 @@ class Utils:
         """
 
         try:
-            self.window.addstr(1, 2, f"[+] Putting {self.iface} into MONITOR mode\n", curses.color_pair(227))
+            self.window.addstr(1, 1, f"[+] Putting {self.iface} into MONITOR mode\n", curses.color_pair(227))
             self.window.noutrefresh()
             curses.doupdate()
 

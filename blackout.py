@@ -121,9 +121,11 @@ class Blackout:
 
             # Start daemon thread
             self.thread_channel_hop.start()
-            self.stdscr.clear()
+            
             self.write_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
             self.write_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
+
+            self.utils.print_headers()
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
@@ -187,8 +189,8 @@ class Blackout:
             self.write_window("blackout.run: {}\n".format(e), curses.A_NORMAL)
             Utils.log_error_to_file(traceback.format_exc())
 
-        # except KeyboardInterrupt:
-        #     pass
+        except KeyboardInterrupt:
+            pass
 
         finally:
             # Put network card back into managed mode
@@ -475,6 +477,9 @@ if __name__ == "__main__":
     except Exception as e:
         window.addstr(f"[!] Error running blackout.run(): {e}")
         Utils.log_error_to_file(traceback.format_exc())
+
+    except KeyboardInterrupt:
+        pass
 
     # finally:
     #     # End curses
