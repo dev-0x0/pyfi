@@ -37,13 +37,12 @@ BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
 
 class Blackout:
 
-    def __init__(self, interface, stdscr, window):
-
-        self.utils = Utils(interface)
+    def __init__(self, interface):
 
         # Set curses screen object
-        self.stdscr = stdscr
-        self.window = window
+        self.stdscr, self.window = self.start_curses()
+
+        self.utils = Utils(interface)
 
         # Set scapy sniff interface
         conf.iface = interface
@@ -65,7 +64,7 @@ class Blackout:
         self.ap_clients = self.manager.list()
 
         # Declare some necessary variables
-        self.displays = {'screen': stdscr, 'window': window}
+        self.displays = {'screen': self.stdscr, 'window': self.window}
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
@@ -91,12 +90,12 @@ class Blackout:
         self.input_thread = Thread(target=self.fetch_input)
         self.input_thread.daemon = True
 
-        # Create thread to output findings in realtime
-        #self.found_thread = Thread(target=self.display_findings)
-        #self.found_thread.daemon = True
-        # Multiprocessing.Event
-        self.display_update_event = Event()
-        self.display_update_event.set()
+        # Events used to determine what we display
+        self.ap_display_update_event = Event()
+        self.ap_display_update_event.set()
+        self.client_display_update_event = Event()
+        self.client_display_update_event.set()
+
 
         # Thread event for stopping input/output threads
         #self.event = Event()
@@ -128,29 +127,25 @@ class Blackout:
 
     def fetch_output(self):
         while True:
-            # if self.event.is_set():
-            #     break
-
             if not self.output_queue.empty():
-                output = self.output_queue.get()
-                Utils.log_error_to_file(output)
-                self.to_window(output)
+                # If False, we are done retrieving sniffed information
+                if self.ap_display_update_event.is_set():
+                    self.to_window(self.output_queue.get())
 
     
     def fetch_input(self):
         while True:
-            # if self.event.is_set():
-            #     break
-
             user_input = self.stdscr.getch()
 
             if user_input in (ord('q'), ord('Q')):
                 self.exit_application('thread')
             
-            elif user_input == ord(' '):
-                #self.display_update_event.clear()
-                self.output_queue.join()
-                self.show_summary()
+            elif user_input == curses.KEY_ENTER:
+                if self.ap_display_update_event.is_set():
+                    self.ap_display_update_event.clear()
+                    self.show_summary()
+                elif self.client_display_update_event.is_set():
+                    self.client_display_update_event.clear()
 
             
 
@@ -199,11 +194,11 @@ class Blackout:
         
         if phase == 'ap':
             self.to_window("[+] Sniffing for Access Points on all channels\n", attr=curses.color_pair(227))
-            self.to_window("[+] Press SPACE to select a target. Q to quit.\n", attr=curses.color_pair(227))
+            self.to_window("[+] Press [ENTER] to select a target. 'q' to quit.\n", attr=curses.color_pair(227))
             self.to_window(self.utils.print_headers(), attr=curses.A_BOLD)
 
             # Sniff for Wireless Access Points
-            self.proc_sniff_ap.start()
+            self.proc_sniff_ap.run()
 
         if phase == 'client':
             pass
@@ -418,7 +413,6 @@ class Blackout:
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        self.display_update_event.wait()
                         found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
                         self.output_queue.put(found_ap)
 
@@ -505,6 +499,37 @@ class Blackout:
             sys.exit(0)
 
 
+    def start_curses(self):
+        # Setup curses
+        stdscr = curses.initscr()
+        curses.noecho()
+        curses.cbreak()
+        #curses.curs_set(0)
+        stdscr.keypad(True)
+
+        # Use all the colours!
+        # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
+        curses.start_color()
+        curses.use_default_colors()
+        for i in range(0, curses.COLORS):
+            curses.init_pair(i + 1, i, -1)
+
+        HEIGHT, WIDTH = stdscr.getmaxyx()
+
+        window = curses.newwin(HEIGHT-2, WIDTH-2, 1, 1)
+        #window.border('|', '|', '-', '-', '+', '+', '+', '+')
+        
+        stdscr.noutrefresh()
+        window.noutrefresh()
+        curses.doupdate()
+
+        return stdscr, window
+
+    
+    def start_processes(self):
+        pass
+
+
 
     def signal_handler(self, sig, stack_frame):
         """
@@ -519,31 +544,7 @@ class Blackout:
 
 if __name__ == "__main__":
 
-    # Setup curses
-    stdscr = curses.initscr()
-    curses.noecho()
-    curses.cbreak()
-    #curses.curs_set(0)
-    stdscr.keypad(True)
-
-    # Use all the colours!
-    # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
-    curses.start_color()
-    curses.use_default_colors()
-    for i in range(0, curses.COLORS):
-        curses.init_pair(i + 1, i, -1)
-
-
-    HEIGHT, WIDTH = stdscr.getmaxyx()
-
-    window = curses.newwin(HEIGHT-2, WIDTH-2, 1, 1)
-    #window.border('|', '|', '-', '-', '+', '+', '+', '+')
-    
-    stdscr.noutrefresh()
-    window.noutrefresh()
-    curses.doupdate()
-
-    blackout = Blackout("wlan0", stdscr, window)
+    blackout = Blackout("wlan0")
 
     # Set the signal handler
     signal.signal(signal.SIGINT, blackout.signal_handler)
@@ -552,19 +553,9 @@ if __name__ == "__main__":
         blackout.run()
 
     except Exception as e:
-        window.addstr(f"[!] Error running blackout.run(): {e}")
         Utils.log_error_to_file(traceback.format_exc())
 
     except KeyboardInterrupt:
         pass
-
-    # finally:
-    #     # End curses
-    #     curses.nocbreak()
-    #     stdscr.keypad(False)
-    #     curses.echo()
-    #     curses.endwin()
-
-    #     sys.exit(0)
 
 
