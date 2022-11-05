@@ -122,6 +122,7 @@ class Utils:
         Put wireless network interface back into managed mode
         """
         try:
+            self.window.erase()
             self.window.addstr(f"[+] Putting {self.iface} back into MANAGED mode\n", curses.color_pair(227))
             self.window.noutrefresh()
             curses.doupdate()
