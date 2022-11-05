@@ -190,8 +190,8 @@ class Blackout:
             self.write_window("blackout.run: {}\n".format(e), curses.A_NORMAL)
             Utils.log_error_to_file(traceback.format_exc())
 
-        except KeyboardInterrupt:
-            pass
+        # except KeyboardInterrupt:
+        #     pass
 
         finally:
             # Put network card back into managed mode
@@ -226,8 +226,8 @@ class Blackout:
                 #while True:
                 sendp(deauth_pkt, inter=0.1, count=100, iface=conf.iface)
 
-            except KeyboardInterrupt:
-                print("[*] Keyboard Interrupt\n")
+            # except KeyboardInterrupt:
+            #     print("[*] Keyboard Interrupt\n")
             except Exception as e:
                 print(f"[!] Error: {e}")
                 self.utils.stop_mon()
@@ -425,7 +425,9 @@ class Blackout:
 
                 self.utils.stop_mon()
 
-                sleep(3)
+                self.write_window("[!] You pressed 'q'...\n")
+
+                sleep(5)
 
                 # End curses
                 curses.nocbreak()
@@ -475,17 +477,13 @@ if __name__ == "__main__":
         window.addstr(f"[!] Error running blackout.run(): {e}")
         Utils.log_error_to_file(traceback.format_exc())
 
+    # finally:
+    #     # End curses
+    #     curses.nocbreak()
+    #     stdscr.keypad(False)
+    #     curses.echo()
+    #     curses.endwin()
 
-    except KeyboardInterrupt:
-        pass
-
-    finally:
-        # End curses
-        curses.nocbreak()
-        stdscr.keypad(False)
-        curses.echo()
-        curses.endwin()
-
-        sys.exit(0)
+    #     sys.exit(0)
 
 
