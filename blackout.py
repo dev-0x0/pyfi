@@ -387,7 +387,7 @@ class Blackout:
         
         for out in outputs: self.main_display.append(out)
 
-        target_id = int(self.stdscr.getch())
+        target_id = chr(self.stdscr.getch())
   
         self.main_display.append(str(target_id))
 
