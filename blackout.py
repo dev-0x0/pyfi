@@ -239,6 +239,8 @@ class Blackout:
             while self.ap_update_event.is_set():
                 pass
 
+            # Give a chance to stop outputs
+            sleep(2)
             self.show_summary()
 
             with open('outlog', 'w') as f:
