@@ -239,6 +239,10 @@ class Blackout:
                 pass
 
             self.show_summary()
+
+            with open('outlog', 'w') as f:
+                f.write('\n'.join(l for l in self.main_display))
+
             self.target_ap = self.select_target_ap()
             
             # Make it all upper-case for comparisons in self.sniff_clients
