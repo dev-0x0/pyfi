@@ -126,11 +126,10 @@ class Blackout:
     ##################
 
     def fetch_output(self):
-        while True:
+        while self.ap_display_update_event.is_set():
             if not self.output_queue.empty():
                 # If False, we are done retrieving sniffed information
-                if self.ap_display_update_event.is_set():
-                    self.to_window(self.output_queue.get())
+                self.to_window(self.output_queue.get())
 
     
     def fetch_input(self):
@@ -140,9 +139,11 @@ class Blackout:
             if user_input in (ord('q'), ord('Q')):
                 self.exit_application('thread')
             
-            elif user_input == curses.KEY_ENTER:
+            elif user_input == ord('s'):
+                #self.to_window("Pressed [S]")
                 if self.ap_display_update_event.is_set():
                     self.ap_display_update_event.clear()
+                    #self.to_window(f"event is {self.ap_display_update_event.is_set()}")
                     self.show_summary()
                 elif self.client_display_update_event.is_set():
                     self.client_display_update_event.clear()
