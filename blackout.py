@@ -18,8 +18,8 @@ import curses
 import pickle
 import logging
 import argparse
+import traceback
 from time import sleep
-from turtle import color
 from utils import Utils
 from subprocess import Popen, PIPE
 from threading import Thread
@@ -85,12 +85,17 @@ class Blackout:
                 'iface': conf.iface,
                 'store': 0})
 
-    def write_window(self, y, x, text, attr):
-        #self.stdscr.noutrefresh()
-        if x and y:
-            self.window.addstr(y, x, text, attr)
+    def write_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
+
+        if y and x:
+            self.window.addstr(y+2, x, text, attr)
+
         else:
-            self.window.addstr(text)
+            y, x = self.stdscr.getyx()
+            self.stdscr.move(y+2, x+1)
+            self.window.addstr(text, attr)
+
+        
 
         self.window.noutrefresh()
         curses.doupdate()
@@ -105,7 +110,7 @@ class Blackout:
 
             # Start daemon thread
             self.thread_channel_hop.start()
-            self.write_window(2, 2, "[+] Sniffing for Access Points on all channels...", curses.A_BOLD)
+            self.write_window("[+] Sniffing for Access Points on all channels...\n", curses.A_BOLD)
 
             # Sniff for Wireless Access Points
             self.thread_sniff_ap.start()
@@ -115,7 +120,7 @@ class Blackout:
 
             # Output a very simple summary of findings
             self.utils.horizontal_rule(30)
-            self.write_window(1, 2, f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
+            self.write_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
@@ -135,7 +140,7 @@ class Blackout:
             # Deauth specific client from AP
             elif choice == '2':
                 self.utils.horizontal_rule(30)
-                self.window_write(f"Sniffing for clients of AP - {self.target_ap['bssid']}...")
+                self.window_write(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
                # print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
 
                 self.proc_sniff_clients.start()
@@ -150,8 +155,8 @@ class Blackout:
                     self.target_client)
 
         except Exception as e:
-            self.write_window(1, 5, "blackout.run: {}".format(e), curses.A_NORMAL)
-            Utils.log_error_to_file(e)
+            self.write_window("blackout.run: {}\n".format(e), curses.A_NORMAL)
+            Utils.log_error_to_file(traceback.format_exc())
 
         except KeyboardInterrupt:
             pass
@@ -283,7 +288,6 @@ class Blackout:
                 
                 # If the packet contains a BSSID we have not encountered
                 if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
-                    self.refresh()
                     bssid = pkt.addr3.upper()  # add the bssid to our bssid list
                     self.all_bssid.append(bssid)
 
@@ -305,16 +309,15 @@ class Blackout:
                         # Output the catch
                         #self.sniffer_window.addstr(f"%2d)\t{Colour.OKBLUE}%-20s\t{Colour.OKGREEN}%-20s\t{Colour.ENDC}%2d\t\t%-20s\n" % (
                         #    count, ssid, bssid, channel, vendor))
-                        self.window.addstr(1, 1, f"{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
-                        self.refresh()
+                        self.write_window(f"{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            self.window.erase()
-                            self.window.addstr(f"[!] Sniffer Error: {e}")
-                            self.refresh()
+                            self.window.addstr(f"[!] Sniffer Error: {e}\n")
+                            Utils.log_error_to_file(traceback.format_exc())
+                            
 
     def get_vendor(self, bssid):
         name = ""
@@ -366,29 +369,35 @@ class Blackout:
         try:
             self.proc_channel_hop.terminate()
             self.proc_channel_hop.join()
+            self.write_window("[+] Terminated channel_hop...", curses.A_BOLD)
         except Exception:
             pass
 
         try:
             self.proc_sniff_ap.terminate()
             self.proc_sniff_ap.join()
+            self.write_window("[+] Terminated sniff_ap...", curses.A_BOLD)
         except Exception:
             pass
 
         try:
             self.proc_sniff_clients.terminate()
             self.proc_sniff_clients.join()
+            self.write_window("[+] Terminated sniff_clients...", curses.A_BOLD)
         except Exception:
             pass
 
         finally:
             self.utils.stop_mon()
 
-            # End curses
+            sleep(5)
+
+            # # End curses
             curses.nocbreak()
             stdscr.keypad(False)
             curses.echo()
             curses.endwin()
+            sys.exit(0)
 
 
 if __name__ == "__main__":
@@ -425,7 +434,7 @@ if __name__ == "__main__":
 
     except Exception as e:
         window.addstr(f"[!] Error running blackout.run(): {e}")
-        Utils.log_error_to_file(e)
+        Utils.log_error_to_file(traceback.format_exc())
 
 
     except KeyboardInterrupt:
@@ -433,7 +442,7 @@ if __name__ == "__main__":
 
     finally:
 
-        c = stdscr.getch()
+        #c = stdscr.getch()
 
         # End curses
         curses.nocbreak()

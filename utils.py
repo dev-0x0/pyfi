@@ -4,6 +4,7 @@ import os
 import sys
 import pickle
 import curses
+import traceback
 from time import sleep
 from subprocess import PIPE, Popen, check_output
 
@@ -112,8 +113,8 @@ class Utils:
             iface_up.communicate()
 
         except Exception as e:
-            self.window.addstr(1, 50, f"[+] Error start_mon: {e}", curses.A_NORMAL)
-            Utils.log_error_to_file(e)
+            self.window.addstr(f"[+] Error start_mon: {e}\n", curses.A_NORMAL)
+            Utils.log_error_to_file(traceback.format_exc())
 
 
     def stop_mon(self):
@@ -121,7 +122,7 @@ class Utils:
         Put wireless network interface back into managed mode
         """
         try:
-            self.window.addstr(1, 2, f"[+] Putting {self.iface} back into MANAGED mode", curses.A_NORMAL)
+            self.window.addstr(f"[+] Putting {self.iface} back into MANAGED mode\n", curses.A_NORMAL)
             self.window.noutrefresh()
             curses.doupdate()
 
@@ -134,12 +135,12 @@ class Utils:
                 self.service_control('start', service)
 
         except Exception as e:
-            self.debug(f"Stop_mon: {e}")
+            Utils.log_error_to_file(traceback.format_exc())
 
 
     def print_headers(self):
         # Print column headings
-        self.window.addstr(1, 2, "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR"), curses.A_NORMAL)
+        self.window.addstr("\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR"), curses.A_NORMAL)
         self.window.noutrefresh()
         curses.doupdate()
         self.horizontal_rule(100)
@@ -169,6 +170,6 @@ class Utils:
 
     @staticmethod
     def log_error_to_file(error):
-        with open('log', 'a') as f:
+        with open('log', 'w') as f:
             f.write(str(error) + '\n')
 
