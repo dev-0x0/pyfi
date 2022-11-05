@@ -39,7 +39,7 @@ class Blackout:
 
     def __init__(self, interface, stdscr, window):
 
-        self.utils = Utils(interface, stdscr, window)
+        self.utils = Utils(interface)
 
         # Set curses screen object
         self.stdscr = stdscr
@@ -117,7 +117,10 @@ class Blackout:
         self.stdscr.clear()
 
         try:
-            self.utils.start_mon(self.window)
+            status = self.utils.start_mon()
+
+            if status is False:
+                raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
 
             # Start daemon thread
             self.thread_channel_hop.start()

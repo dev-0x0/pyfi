@@ -26,18 +26,11 @@ class Utils:
         self.iface = str(iface)
         self.services = ['NetworkManager', 'wpa_supplicant']
 
-    def refresh_screen(self, window):
-        window.noutrefresh()
-        curses.doupdate()
 
-    def clear_screen(self, stdscr, window):
-        stdscr.clear()
-        self.refresh_screen(window)
-
-    def horizontal_rule(self, n, window):
-        window.addstr("-" * n)
-        window.addstr("\n")
-        self.refresh_screen(window)
+    def horizontal_rule(self, n):
+        hr = "-" * n
+        return hr + "\n"
+        
 
     def self_mac(self):
         """
@@ -82,24 +75,18 @@ class Utils:
 
     def service_control(self, action, service, window):
         Popen(['systemctl', action, service]).communicate()
-        window.addstr(f"[+] {action}: {service}\n", curses.A_NORMAL)
-        self.refresh_screen(window)
 
 
-    def start_mon(self, window):
+    def start_mon(self):
         """
         Put wireless network interface into monitor mode
         """
 
         try:
-            window.addstr(1, 1, f"[+] Putting {self.iface} into MONITOR mode\n", curses.color_pair(227))
-            self.refresh_screen(window)
-
             # Need to kill any processes that my change channels or put interface back into MANAGED mode
             for service in self.services:
                 if self.service_is_active(service):
-                    self.debug(f"{service} is active")
-                    self.service_control('stop', service, window)
+                    self.service_control('stop', service)
 
             # Ex: ip link set wlan0 down
             iface_down = Popen(['ip', 'link', 'set', self.iface, 'down'])
@@ -115,53 +102,49 @@ class Utils:
             set_monitor_mode.communicate()
             iface_up.communicate()
 
+            return True
+
         except Exception as e:
-            window.addstr(f"[+] Error start_mon: {e}\n", curses.A_NORMAL)
-            self.refresh_screen(window)
             Utils.log_error_to_file(traceback.format_exc())
+            return False
 
 
-    def stop_mon(self, stdscr, window):
+    def stop_mon(self):
         """
         Put wireless network interface back into managed mode
         """
         try:
-            self.clear_screen(stdscr, window)
-            window.addstr(f"[+] Putting {self.iface} back into MANAGED mode\n", curses.color_pair(227))
-            self.refresh_screen(window)
-
             os.system(f"ifconfig {self.iface} down")
             os.system(f"iw {self.iface} set type managed")
             os.system(f"ifconfig {self.iface} up")
 
             # Restart any stopped services
             for service in self.services:
-                self.service_control('start', service, window)
+                self.service_control('start', service)
+
+            return True
 
         except Exception as e:
             Utils.log_error_to_file(traceback.format_exc())
+            return False
 
 
-    def print_headers(self, window):
+    def print_headers(self):
         # Print column headings
-        window.addstr("\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR"), curses.A_NORMAL)
-        self.horizontal_rule(100, window)
+        return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR")
 
  
-    def choose_mode(self):
-        print('\n')
-        print("1) Deauthenticate ALL clients from AP")
-        print("2) Deauthenticate specific client from AP (sniff clients)\n")
-        choice = input("[*] Enter choice: ")
+    def choice_string(self):
+        choice_str = '\n'
+        choice_str += "1) Deauthenticate ALL clients from AP"
+        choice_str += "2) Deauthenticate specific client from AP (sniff clients)\n"
+        # choice = input("[*] Enter choice: ")
 
-        while choice not in ('1', '2'):
-            print("[!] Please enter a valid choice\n")
+        # while choice not in ('1', '2'):
+            # print("[!] Please enter a valid choice\n")
 
-        return choice
+        return choice_str
 
-
-    def debug(self, msg):
-        self.window.addstr(10, 2, f"{msg}", curses.A_NORMAL)
 
     @staticmethod
     def compile_vendors():
@@ -169,6 +152,7 @@ class Utils:
             # FORMAT -> {"XX:YY:ZZ": MANUFACTURER, "AA:BB:CC": MANUFACTURER, ... etc }
             vendors = pickle.load(f)
         return vendors
+
 
     @staticmethod
     def log_error_to_file(error):
