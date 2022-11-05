@@ -106,11 +106,13 @@ class Blackout:
         self.client_update_event.set()
 
         # AP sniffer Process
-        self.proc_sniff_ap = Process(
+        self.sniff_ap_thread = Thread(
             target=sniff, kwargs={
                 'prn': self.sniff_access_points,
                 'iface': conf.iface,
                 'store': 0})
+
+        self.sniff_ap_thread.daemon = True
 
         # Client sniffer Process
         self.proc_sniff_clients = Process(
@@ -123,7 +125,7 @@ class Blackout:
         # All Processes and their termination flags
         # ( [Process, flag], ... )
         self.procs_flags = (
-            [self.proc_sniff_ap, self.terminate_sniff_ap],
+            [self.sniff_ap_thread, self.terminate_sniff_ap],
             [self.proc_sniff_clients, self.terminate_sniff_clients])
 
 
@@ -160,8 +162,8 @@ class Blackout:
         sleep(1)
 
 
-    # Curses display methods
-    ########################
+    # Curses-related convenience methods
+    ####################################
 
     def refresh_screen(self):
         self.window.noutrefresh()
@@ -196,7 +198,6 @@ class Blackout:
     def start_threads(self):
         # Start daemon threads
         self.thread_channel_hop.start()
-        #self.output_thread.start()
         self.input_thread.start()
 
     # Sniffer methods
@@ -210,7 +211,7 @@ class Blackout:
             self.main_display.append(self.utils.print_headers())
 
             # Sniff for Wireless Access Points
-            self.proc_sniff_ap.start()
+            self.sniff_ap_thread.start()
 
         if phase == 'client':
             pass
@@ -516,7 +517,11 @@ class Blackout:
     def exit_application(self, source='main'):
 
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
-        self.utils.stop_mon()
+        
+        status = self.utils.stop_mon()
+        if not status:
+            raise Exception("[!] Error putting {self.iface} into MANAGED mode")
+
         self.exit_curses()
 
         if source == 'thread':
