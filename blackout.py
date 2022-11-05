@@ -188,7 +188,7 @@ class Blackout:
     
     def interface_setup(self):
         self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
-        self.main_display.append(f"[+] Stopping any interfering processes...")
+        self.main_display.append(f"[+] Stopping any interfering processes...\n")
 
         status = self.utils.start_mon()
 
@@ -207,7 +207,7 @@ class Blackout:
         
         if phase == 'ap':
             self.main_display.append("[+] Sniffing for Access Points on all channels\n")
-            self.main_display.append("[+] Press [ENTER] to select a target. 'q' to quit.\n")
+            self.main_display.append("[+] Press 's' to select a target. 'q' to quit.\n")
             self.main_display.append(self.utils.print_headers())
 
             # Sniff for Wireless Access Points
@@ -242,9 +242,6 @@ class Blackout:
             # Give a chance to stop outputs
             sleep(2)
             self.show_summary()
-
-            with open('outlog', 'w') as f:
-                f.write('\n'.join(l for l in self.main_display))
 
             self.target_ap = self.select_target_ap()
             
@@ -390,10 +387,12 @@ class Blackout:
         
         for out in outputs: self.main_display.append(out)
 
-        target_id = self.stdscr.getch()
+        target_id = int(self.stdscr.getch())
+  
+        self.main_display.append(str(target_id))
 
         #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
-        target_ap = self.ap_dict[target_id]
+        target_ap = self.ap_dict[int(target_id)]
 
         outputs = [
             self.utils.horizontal_rule(30),
@@ -441,13 +440,8 @@ class Blackout:
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        #found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
                         found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
-                        # self.output_queue.put(found_ap)
                         self.main_display.append(found_ap)
-
-                        # Set the event so the display is updated
-                        #self.display_update_event.set()
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
