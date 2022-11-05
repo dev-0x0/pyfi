@@ -178,7 +178,7 @@ class Blackout:
     
     def interface_setup(self):
         self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
-        self.to_window(f"[+] Stopping any interfering processes...", attr=curses.color.pair(227))
+        self.to_window(f"[+] Stopping any interfering processes...", attr=curses.color_pair(227))
         status = self.utils.start_mon()
 
         if status is False:
