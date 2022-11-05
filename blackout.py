@@ -22,8 +22,8 @@ import traceback
 from time import sleep
 from utils import Utils
 from subprocess import Popen, PIPE
-from threading import Thread, Event
-#from multiprocessing import Process, Manager
+from threading import Thread
+from multiprocessing import Process, Manager
 from scapy.all import *
 
 # set scapy verbosity to zero
@@ -51,19 +51,21 @@ class Blackout:
         # Compile list of vendors
         self.vendors = Utils.compile_vendors()
 
-        self.ap_dict = dict()
-        self.all_bssid = list()
-        self.ap_clients = list()
+        # Create cross-process data structures
+        self.manager = Manager()
+        self.ap_dict = self.manager.dict()
+        self.all_bssid = self.manager.list()
+        self.ap_clients = self.manager.list()
 
         # Declare some necessary variables
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
 
-        # Thread Events for stopping threads
-        self.event_sniff_ap = Event()
-        self.event_sniff_clients = Event()
-        self.event_deauth = Event()
+        # Flags for stopping Processes
+        self.terminate_sniff_ap = False
+        self.terminate_sniff_clients = False
+        self.terminate_deauth = False
 
         # Channel hopping thread
         self.thread_channel_hop = Thread(
@@ -73,28 +75,26 @@ class Blackout:
         # Make the thread run in the background as a daemon
         self.thread_channel_hop.daemon = True
 
-
-        # AP sniffer Thread
-        self.thread_sniff_ap = Thread(
+        # AP sniffer Process
+        self.proc_sniff_ap = Process(
             target=sniff, kwargs={
                 'prn': self.sniff_access_points,
                 'iface': conf.iface,
                 'store': 0})
 
-
-        # Client sniffer Thread
-        self.thread_sniff_clients = Thread(
+        # Client sniffer Process
+        self.proc_sniff_clients = Process(
             target=sniff,
             kwargs={
                 'prn': self.sniff_clients,
                 'iface': conf.iface,
                 'store': 0})
 
-        # All threads and their events
-        # (thread, event)
-        self.threads_events = (
-            (self.thread_sniff_ap, self.event_sniff_ap),
-            (self.thread_sniff_clients, self.event_sniff_clients))
+        # All Processes and their termination flags
+        # (Process, flag)
+        self.procs_flags = (
+            (self.proc_sniff_ap, self.terminate_sniff_ap),
+            (self.proc_sniff_clients, self.terminate_sniff_clients))
 
 
     def write_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
@@ -106,8 +106,6 @@ class Blackout:
             y, x = self.stdscr.getyx()
             self.stdscr.move(y+2, x+1)
             self.window.addstr(text, attr)
-
-        
 
         self.window.noutrefresh()
         curses.doupdate()
@@ -128,21 +126,20 @@ class Blackout:
             self.write_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
 
             # Sniff for Wireless Access Points
-            self.thread_sniff_ap.start()
+            self.proc_sniff_ap.start()
 
             # Get user input with curses
             while True:
                 c = self.stdscr.getch()
                 if c == ord('q'):
-                    for thread, _ in self.threads_events:
-                        # Terminate ALL threads and exit
-                        thread.terminate()
-                        thread.join()
+                    for _, flag in self.procs_events:
+                        # Set all process termination flags
+                        flag = True
                     
                     raise KeyboardInterrupt
 
                 if c == ord(' '):
-                    # Terminate AP sniffer thread
+                    # Terminate AP sniffer Process
                     # Move to target selection phase
                     self.write_window("[+] You pressed SPACE....")
                     break
@@ -274,9 +271,8 @@ class Blackout:
                     # If the target AP is either source or destination, we know the other is a client
                     if BROADCAST_ADDR not in (dst, src):
                         if src == self.target_bssid and dst not in self.ap_clients:
-                            self.ap_clients.append(dst)
-                            print(f"[*] {dst}\t{self.get_vendor(dst)}")
-
+    
+           
                         elif dst == self.target_bssid and src not in self.ap_clients:
                             self.ap_clients.append(src)
                             print(f"[*] {src}\t{self.get_vendor(src)}")
@@ -409,19 +405,21 @@ class Blackout:
 
         try:
 
-            # Check if all threads are terminated
-            if all(thread.isAlive() == False for thread, _ in self.threads_events):
-                # If so, set all thread events
-                self.write_window("[!] Quitting...\n")
-                for _, event in self.threads_events:
-                    event.set()
+            for proc, flag in self.procs_flags:
+                if flag:
+                    try:
+                        proc.terminate()
+                        proc.join()
+                    except Exception:
+                        pass
                 
         except Exception as e:
             Utils.log_error_to_file(e)
 
         finally:
 
-            if all(event.is_set() for _, event in self.threads_events):
+            # If all flags are True, exit the application
+            if all(flag for _, flag in self.procs_flags):
 
                 self.utils.stop_mon()
 
