@@ -138,7 +138,7 @@ class Blackout:
                 self.exit_application('thread')
             
             elif user_input == ord(' '):
-                self.to_window("[+] SPACE\n")
+                self.stop_sniff()
             
 
     # Curses display methods
@@ -160,6 +160,9 @@ class Blackout:
 
         self.refresh_screen()
 
+
+    # Application setup
+    ###################
     
     def interface_setup(self):
         self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
@@ -176,7 +179,10 @@ class Blackout:
         self.input_thread.start()
 
 
-    def sniffer(self, phase='ap'):
+    # Sniffer methods
+    #################
+
+    def start_sniff(self, phase='ap'):
         
         if phase == 'ap':
             self.to_window("[+] Sniffing for Access Points on all channels\n", attr=curses.color_pair(227))
@@ -190,6 +196,14 @@ class Blackout:
             pass
 
 
+    def stop_sniff(self):
+        self.proc_sniff_ap.terminate()
+        self.proc_sniff_ap.join()
+        # Output a very simple summary of findings
+        self.utils.horizontal_rule(30)
+        self.to_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
+
+
     def run(self):
 
         # clear screen
@@ -199,18 +213,11 @@ class Blackout:
         try:
             self.interface_setup()
             self.start_threads()
-            self.sniffer()
+            self.start_sniff(phase='ap')
         
             # Get user input with curses
             while True:
                 pass
-
-            # Wait for processes to terminate
-            #self.thread_sniff_ap.join()
-
-            # Output a very simple summary of findings
-            self.utils.horizontal_rule(30)
-            self.to_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
