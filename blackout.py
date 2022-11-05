@@ -199,7 +199,7 @@ class Blackout:
             self.to_window(self.utils.print_headers(), attr=curses.A_BOLD)
 
             # Sniff for Wireless Access Points
-            self.proc_sniff_ap.run()
+            self.proc_sniff_ap.start()
 
         if phase == 'client':
             pass
@@ -222,8 +222,8 @@ class Blackout:
             self.start_sniff(phase='ap')
         
             # Get user input with curses
-            while True:
-                pass
+            # while True:
+            #     pass
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
@@ -366,7 +366,10 @@ class Blackout:
         self.utils.horizontal_rule(30)
 
         self.to_window("\nEnter ID of the AP you wish to target: ")
+        # Show this input on display
+        curses.echo()
         target_id = self.stdscr.getch()
+        curses.noecho()
 
         #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
         target_ap = self.ap_dict[target_id]
@@ -445,7 +448,7 @@ class Blackout:
         Hop channels until interrupted
         """
 
-        # total of 13 channels to search through
+        # Total of 13 channels to search through (11 in the US)
         limit = 14
 
         while True:
@@ -525,7 +528,7 @@ class Blackout:
         curses.doupdate()
 
         return stdscr, window
-        
+
 
     def signal_handler(self, sig, stack_frame):
         """
