@@ -132,7 +132,7 @@ class Blackout:
             while True:
                 c = self.stdscr.getch()
                 if c == ord('q'):
-                    for _, flag in self.procs_events:
+                    for _, flag in self.procs_flags:
                         # Set all process termination flags
                         flag = True
                     
