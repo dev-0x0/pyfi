@@ -418,7 +418,7 @@ if __name__ == "__main__":
     HEIGHT, WIDTH = stdscr.getmaxyx()
 
     window = curses.newwin(HEIGHT-2, WIDTH-2, 1, 1)
-    window.border('|', '|', '-', '-', '+', '+', '+', '+')
+    #window.border('|', '|', '-', '-', '+', '+', '+', '+')
     
     stdscr.noutrefresh()
     window.noutrefresh()
