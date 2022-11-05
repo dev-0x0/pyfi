@@ -73,7 +73,7 @@ class Utils:
         return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
 
 
-    def service_control(self, action, service, window):
+    def service_control(self, action, service):
         Popen(['systemctl', action, service]).communicate()
 
 

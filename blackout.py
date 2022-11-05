@@ -22,7 +22,7 @@ import traceback
 from time import sleep
 from utils import Utils
 from subprocess import Popen, PIPE
-from threading import Thread
+from threading import Thread, Event
 from multiprocessing import Process, Manager
 from scapy.all import *
 
@@ -54,13 +54,15 @@ class Blackout:
 
         # Create cross-process data structures
         self.manager = Manager()
-        self.outputs = self.manager.dict()
+        self.output_queue = self.manager.Queue()
+        self.input_queue = self.manager.Queue()
+        self.displays = self.manager.dict()
         self.ap_dict = self.manager.dict()
         self.all_bssid = self.manager.list()
         self.ap_clients = self.manager.list()
 
         # Declare some necessary variables
-        self.outputs = {'screen': stdscr, 'window': window}
+        self.displays = {'screen': stdscr, 'window': window}
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
@@ -77,6 +79,19 @@ class Blackout:
 
         # Make the thread run in the background as a daemon
         self.thread_channel_hop.daemon = True
+
+        # Create thread to output data from processes to main curses screen
+        self.output_thread = Thread(target=self.fetch_output)
+        #self.output_thread.daemon = True
+
+        # Create thread to listen for user input
+        self.input_thread = Thread(target=self.fetch_input)
+        #self.input_thread.daemon = True
+        # Variable in which to store user input
+        self.user_input = None
+
+        # Thread event for stopping input/output threads
+        self.event = Event()
 
         # AP sniffer Process
         self.proc_sniff_ap = Process(
@@ -100,60 +115,82 @@ class Blackout:
             [self.proc_sniff_clients, self.terminate_sniff_clients])
 
 
-    def to_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
+    def fetch_output(self):
+        while True:
+            if self.event.is_set():
+                break
 
-        if y and x:
-            self.outputs['window'].addstr(y+2, x, text, attr)
+            if not self.output_queue.empty():
+                output = self.output_queue.get()
+                self.to_window(output)
 
-        else:
-            y, x = self.outputs['screen'].getyx()
-            self.outputs['screen'].move(y+2, x+1)
-            self.outputs['window'].addstr(text, attr)
+    
+    def fetch_input(self):
+        while True:
+            if self.event.is_set():
+                break
 
+            if not self.input_queue.empty():
+                self.user_input = self.input_queue.get()
+
+    def refresh_screen(self):
         self.window.noutrefresh()
         curses.doupdate()
+
+    def to_window(self, text, attr=curses.A_NORMAL, y=None, x=None):
+
+        if y and x:
+            self.displays['window'].addstr(y+2, x, text, attr)
+
+        else:
+            y, x = self.displays['screen'].getyx()
+            self.displays['screen'].move(y+2, x+1)
+            self.displays['window'].addstr(text, attr)
+
+        self.refresh_screen()
 
 
     def run(self):
 
         # clear screen
         self.stdscr.clear()
+        self.refresh_screen()
 
         try:
-            self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", curses.color_pair(227))
+            self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
             status = self.utils.start_mon()
 
             if status is False:
                 raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
 
-            # Start daemon thread
+            # Start daemon threads
             self.thread_channel_hop.start()
+            self.output_thread.start()
+            self.input_thread.start()
             
-            self.to_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
-            self.to_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
+            self.to_window("[+] Sniffing for Access Points on all channels\n", attr=curses.color_pair(227))
+            self.to_window("[+] Press SPACE to select a target. Q to quit.\n", attr=curses.color_pair(227))
             headers = self.utils.print_headers()
-            self.to_window(headers, curses.A_BOLD)
-
-            sleep(5)
+            self.to_window(headers, attr=curses.A_BOLD)
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
 
             # Get user input with curses
             while True:
-                c = self.stdscr.getch()
-                if c == ord('q'):
-                    for entry in self.procs_flags:
-                        # Set all process termination flags
-                        entry[1] = True
-                    
-                    self.exit_application()
+                if self.user_input:
+                    if self.user_input == ord('q'):
+                        for entry in self.procs_flags:
+                            # Set all process termination flags
+                            entry[1] = True
+                        
+                        self.exit_application()
 
-                if c == ord(' '):
-                    # Terminate AP sniffer Process
-                    # Move to target selection phase
-                    self.to_window("[+] You pressed SPACE....")
-                    break
+                    if self.user_input == ord(' '):
+                        # Terminate AP sniffer Process
+                        # Move to target selection phase
+                        self.to_window("[+] You pressed SPACE....")
+                        break
 
             # Wait for processes to terminate
             #self.thread_sniff_ap.join()
@@ -351,13 +388,14 @@ class Blackout:
                         vendor = self.get_vendor(bssid)
 
                         # Output the catch
-                        self.to_window(f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
+                        found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
+                        self.output_queue.put(found_ap)
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            self.to_window(f"[!] Sniffer Error: {e}\n")
+                            self.output_queue.put("[!] Sniffer Error: {e}\n")
                             Utils.log_error_to_file(traceback.format_exc())
                             
 
@@ -415,17 +453,19 @@ class Blackout:
 
         self.to_window("[!!] Exiting...\n")
 
+        # Terminate input/output threads
+        self.event.set()
+
         for proc, _ in self.procs_flags:
             try:
                 proc.terminate()
                 proc.join()
             except Exception as e:
-                self.to_window(f"exit-application: {e}")
+                Utils.log_error_to_file(e)
 
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
         self.utils.stop_mon()
         
-        self.to_window("[!!] Exiting curses...")
         self.exit_curses()
         sys.exit(0)
 
