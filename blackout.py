@@ -159,26 +159,26 @@ class Blackout:
             #self.thread_sniff_ap.join()
 
             # Output a very simple summary of findings
-            self.utils.horizontal_rule(30, self.window)
+            self.utils.horizontal_rule(30)
             self.to_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
             
-            # Important to make it upper for comparisons in self.sniff_clients
+            # Make it all upper-case for comparisons in self.sniff_clients
             self.target_bssid = self.target_ap['bssid'].upper()
 
-            choice = self.utils.choose_mode()
+            self.to_window(self.utils.choice_string())
+            choice = self.stdscr.getch()
 
             # Deuth ALL clients from AP
-            if choice == '1':
+            if choice == ord('1'):
                 self.deauth(
                     self.target_ap['bssid'],
                     str(self.target_ap['channel']),
                     BROADCAST_ADDR)
                 self.utils.horizontal_rule(30)
-                self.window_write(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
-               # print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
+                self.to_window(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
 
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()
@@ -302,16 +302,17 @@ class Blackout:
     def select_target_ap(self):
         self.utils.horizontal_rule(30)
 
-        target_id = int(input("\nEnter ID of the AP you wish to target: "))
+        self.to_window("\nEnter ID of the AP you wish to target: ")
+        target_id = self.stdscr.getch()
 
         #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
         target_ap = self.ap_dict[target_id]
 
         self.utils.horizontal_rule(30)
-        print(f"\nSelected Access Point [{target_id}]\n")
-        print(f"\tssid:\t\t{target_ap['ssid']:20}")
-        print(f"\tbssid:\t\t{target_ap['bssid']:20}")
-        print(f"\tchannel:\t\t{target_ap['channel']:20}\n")
+        self.to_window(f"\nSelected Access Point [{target_id}]\n")
+        self.to_window(f"\tssid:\t\t{target_ap['ssid']:20}")
+        self.to_window(f"\tbssid:\t\t{target_ap['bssid']:20}")
+        self.to_window(f"\tchannel:\t\t{target_ap['channel']:20}\n")
         self.utils.horizontal_rule(30)
 
         return target_ap
@@ -437,44 +438,7 @@ class Blackout:
         """
         sleep(1)
 
-        self.to_window("[+] INTERUPT\n", curses.A_BLINK)
-
-        try:
-
-            for proc, flag in self.procs_flags:
-                if proc.is_alive() and flag:
-                    try:
-                        proc.terminate()
-                        proc.join()
-                    except Exception:
-                        pass
-                
-        except Exception as e:
-            Utils.log_error_to_file(e)
-
-        finally:
-
-            self.to_window("FINALLY\n")
-
-            # If all flags are True, exit the application
-            if all(flag for _, flag in self.procs_flags):
-
-                self.to_window("ALL FLAGS TRUE")
-                #TODO return string from function and print that instead
-                self.utils.stop_mon()
-
-                self.to_window("[!] You pressed 'q'...\n")
-
-                sleep(5)
-
-                # End curses
-                curses.nocbreak()
-                stdscr.keypad(False)
-                curses.echo()
-                curses.endwin()
-
-                # Exit
-                sys.exit(0)
+        self.exit_application()
 
 
 if __name__ == "__main__":
