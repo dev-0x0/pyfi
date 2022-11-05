@@ -53,11 +53,13 @@ class Blackout:
 
         # Create cross-process data structures
         self.manager = Manager()
+        self.outputs = self.manager.dict()
         self.ap_dict = self.manager.dict()
         self.all_bssid = self.manager.list()
         self.ap_clients = self.manager.list()
 
         # Declare some necessary variables
+        self.outputs = {'screen': stdscr, 'window': window}
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
@@ -100,12 +102,12 @@ class Blackout:
     def to_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
 
         if y and x:
-            self.window.addstr(y+2, x, text, attr)
+            self.outputs['window'].addstr(y+2, x, text, attr)
 
         else:
-            y, x = self.stdscr.getyx()
-            self.stdscr.move(y+2, x+1)
-            self.window.addstr(text, attr)
+            y, x = self.outputs['screen'].getyx()
+            self.outputs['screen'].move(y+2, x+1)
+            self.outputs['window'].addstr(text, attr)
 
         self.window.noutrefresh()
         curses.doupdate()
@@ -117,6 +119,7 @@ class Blackout:
         self.stdscr.clear()
 
         try:
+            self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", curses.color_pair(227))
             status = self.utils.start_mon()
 
             if status is False:
@@ -346,9 +349,7 @@ class Blackout:
                         vendor = self.get_vendor(bssid)
 
                         # Output the catch
-                        #self.sniffer_window.addstr(f"%2d)\t{Colour.OKBLUE}%-20s\t{Colour.OKGREEN}%-20s\t{Colour.ENDC}%2d\t\t%-20s\n" % (
-                        #    count, ssid, bssid, channel, vendor))
-                        self.to_window(f"{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
+                        self.to_window(f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
