@@ -96,6 +96,7 @@ class Blackout:
         #self.found_thread.daemon = True
         # Multiprocessing.Event
         self.display_update_event = Event()
+        self.display_update_event.set()
 
         # Thread event for stopping input/output threads
         #self.event = Event()
@@ -147,7 +148,7 @@ class Blackout:
                 self.exit_application('thread')
             
             elif user_input == ord(' '):
-                self.display_update_event.set()
+                self.display_update_event.clear()
                 self.show_summary()
 
             
@@ -177,6 +178,7 @@ class Blackout:
     
     def interface_setup(self):
         self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
+        self.to_window(f"[+] Stopping any interfering processes...", attr=curses.color.pair(227))
         status = self.utils.start_mon()
 
         if status is False:
@@ -415,9 +417,9 @@ class Blackout:
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        if not self.display_update_event.is_set():
-                            found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
-                            self.output_queue.put(found_ap)
+                        self.display_update_event.wait()
+                        found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
+                        self.output_queue.put(found_ap)
 
                         # Set the event so the display is updated
                         #self.display_update_event.set()
