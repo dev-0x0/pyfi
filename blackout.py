@@ -47,6 +47,7 @@ class Blackout:
 
         # Set scapy sniff interface
         conf.iface = interface
+        self.iface = interface
 
         # Compile list of vendors
         self.vendors = Utils.compile_vendors()
