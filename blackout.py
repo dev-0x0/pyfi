@@ -271,8 +271,9 @@ class Blackout:
                     # If the target AP is either source or destination, we know the other is a client
                     if BROADCAST_ADDR not in (dst, src):
                         if src == self.target_bssid and dst not in self.ap_clients:
-    
-           
+                            self.ap_clients.append(dst)
+                            print(f"[*] {dst}\t{self.get_vendor(dst)}")
+
                         elif dst == self.target_bssid and src not in self.ap_clients:
                             self.ap_clients.append(src)
                             print(f"[*] {src}\t{self.get_vendor(src)}")
