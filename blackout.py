@@ -159,7 +159,7 @@ class Blackout:
             self.to_window(line)
 
         self.refresh_screen()
-        sleep(1)
+        # sleep(1)
 
 
     # Curses-related convenience methods
@@ -370,13 +370,13 @@ class Blackout:
             print(f"[*] sniff_clients error: {e}")
 
 
-    def list_clients(self):
-        print("\n")
-        self.utils.horizontal_rule(20)
-        for i, client in enumerate(self.ap_clients):
-            # Find manufacturer
-            name = self.get_vendor(client)
-            print(f"{i + 1}) {client}\t{name}")
+    # def list_clients(self):
+    #     print("\n")
+    #     self.utils.horizontal_rule(20)
+    #     for i, client in enumerate(self.ap_clients):
+    #         # Find manufacturer
+    #         name = self.get_vendor(client)
+    #         print(f"{i + 1}) {client}\t{name}")
 
 
     def select_target_ap(self):
