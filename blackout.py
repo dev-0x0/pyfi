@@ -82,13 +82,11 @@ class Blackout:
 
         # Create thread to output data from processes to main curses screen
         self.output_thread = Thread(target=self.fetch_output)
-        #self.output_thread.daemon = True
+        self.output_thread.daemon = True
 
         # Create thread to listen for user input
         self.input_thread = Thread(target=self.fetch_input)
-        #self.input_thread.daemon = True
-        # Variable in which to store user input
-        self.user_input = None
+        self.input_thread.daemon = True
 
         # Thread event for stopping input/output threads
         self.event = Event()
@@ -115,6 +113,9 @@ class Blackout:
             [self.proc_sniff_clients, self.terminate_sniff_clients])
 
 
+    # Thread methods
+    ##################
+
     def fetch_output(self):
         while True:
             if self.event.is_set():
@@ -122,6 +123,7 @@ class Blackout:
 
             if not self.output_queue.empty():
                 output = self.output_queue.get()
+                Utils.log_error_to_file(output)
                 self.to_window(output)
 
     
@@ -130,8 +132,17 @@ class Blackout:
             if self.event.is_set():
                 break
 
-            if not self.input_queue.empty():
-                self.user_input = self.input_queue.get()
+            user_input = self.stdscr.getch()
+
+            if user_input in (ord('q'), ord('Q')):
+                self.exit_application('thread')
+            
+            elif user_input == ord(' '):
+                self.to_window("[+] SPACE\n")
+            
+
+    # Curses display methods
+    ########################
 
     def refresh_screen(self):
         self.window.noutrefresh()
@@ -149,6 +160,35 @@ class Blackout:
 
         self.refresh_screen()
 
+    
+    def interface_setup(self):
+        self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
+        status = self.utils.start_mon()
+
+        if status is False:
+            raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
+
+
+    def start_threads(self):
+        # Start daemon threads
+        self.thread_channel_hop.start()
+        self.output_thread.start()
+        self.input_thread.start()
+
+
+    def sniffer(self, phase='ap'):
+        
+        if phase == 'ap':
+            self.to_window("[+] Sniffing for Access Points on all channels\n", attr=curses.color_pair(227))
+            self.to_window("[+] Press SPACE to select a target. Q to quit.\n", attr=curses.color_pair(227))
+            self.to_window(self.utils.print_headers(), attr=curses.A_BOLD)
+
+            # Sniff for Wireless Access Points
+            self.proc_sniff_ap.start()
+
+        if phase == 'client':
+            pass
+
 
     def run(self):
 
@@ -157,40 +197,13 @@ class Blackout:
         self.refresh_screen()
 
         try:
-            self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
-            status = self.utils.start_mon()
-
-            if status is False:
-                raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
-
-            # Start daemon threads
-            self.thread_channel_hop.start()
-            self.output_thread.start()
-            self.input_thread.start()
-            
-            self.to_window("[+] Sniffing for Access Points on all channels\n", attr=curses.color_pair(227))
-            self.to_window("[+] Press SPACE to select a target. Q to quit.\n", attr=curses.color_pair(227))
-            headers = self.utils.print_headers()
-            self.to_window(headers, attr=curses.A_BOLD)
-
-            # Sniff for Wireless Access Points
-            self.proc_sniff_ap.start()
-
+            self.interface_setup()
+            self.start_threads()
+            self.sniffer()
+        
             # Get user input with curses
             while True:
-                if self.user_input:
-                    if self.user_input == ord('q'):
-                        for entry in self.procs_flags:
-                            # Set all process termination flags
-                            entry[1] = True
-                        
-                        self.exit_application()
-
-                    if self.user_input == ord(' '):
-                        # Terminate AP sniffer Process
-                        # Move to target selection phase
-                        self.to_window("[+] You pressed SPACE....")
-                        break
+                pass
 
             # Wait for processes to terminate
             #self.thread_sniff_ap.join()
@@ -448,14 +461,8 @@ class Blackout:
         curses.echo()
         curses.endwin()
 
-    
-    def exit_application(self):
 
-        self.to_window("[!!] Exiting...\n")
-
-        # Terminate input/output threads
-        self.event.set()
-
+    def stop_processes(self):
         for proc, _ in self.procs_flags:
             try:
                 proc.terminate()
@@ -463,11 +470,19 @@ class Blackout:
             except Exception as e:
                 Utils.log_error_to_file(e)
 
+    
+    def exit_application(self, source='main'):
+
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
         self.utils.stop_mon()
-        
         self.exit_curses()
-        sys.exit(0)
+
+        if source == 'thread':
+            os._exit(1)
+        
+        if source == 'main':
+            sys.exit(0)
+
 
 
     def signal_handler(self, sig, stack_frame):

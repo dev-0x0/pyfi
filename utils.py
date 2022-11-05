@@ -132,7 +132,7 @@ class Utils:
     def print_headers(self):
         # Print column headings
         # return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR")
-        return "::ID    ::CHANNEL    ::SSID    ::BSSID    ::VENDOR\n"
+        return "\n::ID    ::CHANNEL    ::SSID    ::BSSID    ::VENDOR\n"
 
  
     def choice_string(self):
