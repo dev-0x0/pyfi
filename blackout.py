@@ -505,7 +505,7 @@ class Blackout:
         stdscr = curses.initscr()
         curses.noecho()
         curses.cbreak()
-        #curses.curs_set(0)
+        curses.curs_set(0)
         stdscr.keypad(True)
 
         # Use all the colours!
@@ -525,12 +525,7 @@ class Blackout:
         curses.doupdate()
 
         return stdscr, window
-
-    
-    def start_processes(self):
-        pass
-
-
+        
 
     def signal_handler(self, sig, stack_frame):
         """
