@@ -127,8 +127,7 @@ class Blackout:
             
             self.write_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
             self.write_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
-
-            self.utils.print_headers(self.window)
+            self.write_windows(self.utils.print_headers(), curses.A_BOLD)
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
