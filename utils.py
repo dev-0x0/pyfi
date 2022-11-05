@@ -21,20 +21,23 @@ from subprocess import PIPE, Popen, check_output
 
 class Utils:
 
-    def __init__(self, iface, stdscr, window):
+    def __init__(self, iface):
         
         self.iface = str(iface)
-        self.stdscr = stdscr
-        self.window = window
         self.services = ['NetworkManager', 'wpa_supplicant']
 
-
-    def horizontal_rule(self, n):
-        self.window.addstr("-" * n)
-        self.window.addstr("\n")
-        self.window.noutrefresh()
+    def refresh_screen(self, window):
+        window.noutrefresh()
         curses.doupdate()
 
+    def clear_screen(self, stdscr, window):
+        stdscr.clear()
+        self.refresh_screen(window)
+
+    def horizontal_rule(self, n, window):
+        window.addstr("-" * n)
+        window.addstr("\n")
+        self.refresh_screen(window)
 
     def self_mac(self):
         """
@@ -77,26 +80,26 @@ class Utils:
         return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
 
 
-    def service_control(self, action, service):
+    def service_control(self, action, service, window):
         Popen(['systemctl', action, service]).communicate()
-        self.window.addstr(f"[+] {action}: {service}\n", curses.A_NORMAL)
+        window.addstr(f"[+] {action}: {service}\n", curses.A_NORMAL)
+        self.refresh_screen(window)
 
 
-    def start_mon(self):
+    def start_mon(self, window):
         """
         Put wireless network interface into monitor mode
         """
 
         try:
-            self.window.addstr(1, 1, f"[+] Putting {self.iface} into MONITOR mode\n", curses.color_pair(227))
-            self.window.noutrefresh()
-            curses.doupdate()
+            window.addstr(1, 1, f"[+] Putting {self.iface} into MONITOR mode\n", curses.color_pair(227))
+            self.refresh_screen(window)
 
             # Need to kill any processes that my change channels or put interface back into MANAGED mode
             for service in self.services:
                 if self.service_is_active(service):
                     self.debug(f"{service} is active")
-                    self.service_control('stop', service)
+                    self.service_control('stop', service, window)
 
             # Ex: ip link set wlan0 down
             iface_down = Popen(['ip', 'link', 'set', self.iface, 'down'])
@@ -113,19 +116,19 @@ class Utils:
             iface_up.communicate()
 
         except Exception as e:
-            self.window.addstr(f"[+] Error start_mon: {e}\n", curses.A_NORMAL)
+            window.addstr(f"[+] Error start_mon: {e}\n", curses.A_NORMAL)
+            self.refresh_screen(window)
             Utils.log_error_to_file(traceback.format_exc())
 
 
-    def stop_mon(self):
+    def stop_mon(self, stdscr, window):
         """
         Put wireless network interface back into managed mode
         """
         try:
-            self.window.erase()
-            self.window.addstr(f"[+] Putting {self.iface} back into MANAGED mode\n", curses.color_pair(227))
-            self.window.noutrefresh()
-            curses.doupdate()
+            self.clear_screen(stdscr, window)
+            window.addstr(f"[+] Putting {self.iface} back into MANAGED mode\n", curses.color_pair(227))
+            self.refresh_screen(window)
 
             os.system(f"ifconfig {self.iface} down")
             os.system(f"iw {self.iface} set type managed")
@@ -133,18 +136,16 @@ class Utils:
 
             # Restart any stopped services
             for service in self.services:
-                self.service_control('start', service)
+                self.service_control('start', service, window)
 
         except Exception as e:
             Utils.log_error_to_file(traceback.format_exc())
 
 
-    def print_headers(self):
+    def print_headers(self, window):
         # Print column headings
-        self.window.addstr("\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR"), curses.A_NORMAL)
-        self.window.noutrefresh()
-        curses.doupdate()
-        self.horizontal_rule(100)
+        window.addstr("\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR"), curses.A_NORMAL)
+        self.horizontal_rule(100, window)
 
  
     def choose_mode(self):

@@ -117,7 +117,7 @@ class Blackout:
         self.stdscr.clear()
 
         try:
-            self.utils.start_mon()
+            self.utils.start_mon(self.window)
 
             # Start daemon thread
             self.thread_channel_hop.start()
@@ -125,7 +125,7 @@ class Blackout:
             self.write_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
             self.write_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
 
-            self.utils.print_headers()
+            self.utils.print_headers(self.window)
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
@@ -150,7 +150,7 @@ class Blackout:
             #self.thread_sniff_ap.join()
 
             # Output a very simple summary of findings
-            self.utils.horizontal_rule(30)
+            self.utils.horizontal_rule(30, self.window)
             self.write_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
 
             # Select an target AP
@@ -424,7 +424,8 @@ class Blackout:
             # If all flags are True, exit the application
             if all(flag for _, flag in self.procs_flags):
 
-                self.utils.stop_mon()
+                #TODO return string from function and print that instead
+                self.utils.stop_mon(self.stdscr, self.window)
 
                 self.write_window("[!] You pressed 'q'...\n")
 
