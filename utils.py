@@ -28,8 +28,8 @@ class Utils:
 
 
     def horizontal_rule(self, n):
-        hr = "-" * n
-        return hr + "\n"
+        hr = '-'*n
+        return '\n'+hr+'\n'
 
 
     def self_mac(self):

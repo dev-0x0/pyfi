@@ -379,19 +379,27 @@ class Blackout:
 
 
     def select_target_ap(self):
-        self.to_window(self.utils.horizontal_rule(30))
-        self.to_window("\nEnter ID of the AP you wish to target: ")
+        
+        outputs = [
+            self.utils.horizontal_rule(30),
+            "\nEnter ID of the AP you wish to target: "]
+        
+        for out in outputs: self.main_display.append(out)
+
         target_id = self.stdscr.getch()
 
         #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
         target_ap = self.ap_dict[target_id]
 
-        self.utils.horizontal_rule(30)
-        self.to_window(f"\nSelected Access Point [{target_id}]\n")
-        self.to_window(f"\tssid:\t\t{target_ap['ssid']:20}")
-        self.to_window(f"\tbssid:\t\t{target_ap['bssid']:20}")
-        self.to_window(f"\tchannel:\t\t{target_ap['channel']:20}\n")
-        self.utils.horizontal_rule(30)
+        outputs = [
+            self.utils.horizontal_rule(30),
+            f"\nSelected Access Point [{target_id}]\n",
+            f"\tssid:\t\t{target_ap['ssid']:20}",
+            f"\tbssid:\t\t{target_ap['bssid']:20}",
+            f"\tchannel:\t\t{target_ap['channel']:20}\n",
+            self.utils.horizontal_rule(30)]
+
+        for out in outputs: self.main_display.append(out)
 
         return target_ap
 
@@ -429,8 +437,10 @@ class Blackout:
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
-                        self.output_queue.put(found_ap)
+                        #found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
+                        found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
+                        # self.output_queue.put(found_ap)
+                        self.main_display.append(found_ap)
 
                         # Set the event so the display is updated
                         #self.display_update_event.set()
