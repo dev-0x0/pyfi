@@ -134,7 +134,7 @@ class Blackout:
         while self.ap_update_event.is_set():
             if not self.output_queue.empty():
                 # If False, we are done retrieving sniffed information
-                self.main_display.append([INFO.AP, self.output_queue.get()])
+                self.main_display.append(self.output_queue.get())
 
     
     def fetch_input(self):
@@ -188,8 +188,8 @@ class Blackout:
     ###################
     
     def interface_setup(self):
-        self.main_display.append([INFO.SETUP, f"[+] Putting {self.iface} into MONITOR mode...\n"])
-        self.main_display.append([INFO.SETUP, f"[+] Stopping any interfering processes..."])
+        self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
+        self.main_display.append(f"[+] Stopping any interfering processes...")
 
         status = self.utils.start_mon()
 
@@ -208,9 +208,9 @@ class Blackout:
     def start_sniff(self, phase='ap'):
         
         if phase == 'ap':
-            self.main_display.append([INFO.SETUP, "[+] Sniffing for Access Points on all channels\n"])
-            self.main_display.append([INFO.SETUP, "[+] Press [ENTER] to select a target. 'q' to quit.\n"])
-            self.main_display.append([INFO.SETUP, self.utils.print_headers()])
+            self.main_display.append("[+] Sniffing for Access Points on all channels\n")
+            self.main_display.append("[+] Press [ENTER] to select a target. 'q' to quit.\n")
+            self.main_display.append(self.utils.print_headers())
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
@@ -221,8 +221,8 @@ class Blackout:
 
     def show_summary(self):
         # Output a very simple summary of findings
-        self.main_display.append([INFO.SETUP, self.utils.horizontal_rule(30)])
-        self.main_display.append([INFO.SETUP, f"\nAccess Points discovered: {len(self.ap_dict)}\n\n"])
+        self.main_display.append(self.utils.horizontal_rule(30))
+        self.main_display.append(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n")
 
 
     def run(self):
@@ -247,7 +247,7 @@ class Blackout:
             # Make it all upper-case for comparisons in self.sniff_clients
             self.target_bssid = self.target_ap['bssid'].upper()
 
-            self.main_display.append([INFO.PROMPT, self.utils.choice_string()])
+            self.main_display.append(self.utils.choice_string())
             choice = self.stdscr.getch()
 
             # Deuth ALL clients from AP
