@@ -413,10 +413,12 @@ class Blackout:
         """
         sleep(1)
 
+        self.to_window("[+] INTERUPT\n", curses.A_BLINK)
+
         try:
 
             for proc, flag in self.procs_flags:
-                if flag:
+                if proc.is_alive() and flag:
                     try:
                         proc.terminate()
                         proc.join()
@@ -428,11 +430,13 @@ class Blackout:
 
         finally:
 
+            self.to_window("FINALLY\n")
+
             # If all flags are True, exit the application
             if all(flag for _, flag in self.procs_flags):
 
                 #TODO return string from function and print that instead
-                self.utils.stop_mon(self.stdscr, self.window)
+                self.utils.stop_mon()
 
                 self.to_window("[!] You pressed 'q'...\n")
 
