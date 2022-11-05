@@ -132,7 +132,7 @@ class Blackout:
             #     break
 
             if not self.output_queue.empty():
-                self.to_window(self.output_queue)
+                self.to_window(list(self.output_queue.queue))
                 output = self.output_queue.get()
                 Utils.log_error_to_file(output)
                 self.to_window(output)
