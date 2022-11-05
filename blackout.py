@@ -22,8 +22,8 @@ import traceback
 from time import sleep
 from utils import Utils
 from subprocess import Popen, PIPE
-from threading import Thread, Event
-from multiprocessing import Process, Manager
+from threading import Thread
+from multiprocessing import Process, Manager, Event
 from scapy.all import *
 
 # set scapy verbosity to zero
@@ -48,6 +48,9 @@ class Blackout:
         # Set scapy sniff interface
         conf.iface = interface
         self.iface = interface
+
+        # File to store pickled findings
+        self.ap_file = 'access-points'
 
         # Compile list of vendors
         self.vendors = Utils.compile_vendors()
@@ -88,8 +91,14 @@ class Blackout:
         self.input_thread = Thread(target=self.fetch_input)
         self.input_thread.daemon = True
 
+        # Create thread to output findings in realtime
+        #self.found_thread = Thread(target=self.display_findings)
+        #self.found_thread.daemon = True
+        # Multiprocessing.Event
+        self.display_update_event = Event()
+
         # Thread event for stopping input/output threads
-        self.event = Event()
+        #self.event = Event()
 
         # AP sniffer Process
         self.proc_sniff_ap = Process(
@@ -138,7 +147,9 @@ class Blackout:
                 self.exit_application('thread')
             
             elif user_input == ord(' '):
-                self.stop_sniff()
+                self.display_update_event.set()
+                self.show_summary()
+
             
 
     # Curses display methods
@@ -171,12 +182,12 @@ class Blackout:
         if status is False:
             raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
 
-
     def start_threads(self):
         # Start daemon threads
         self.thread_channel_hop.start()
         self.output_thread.start()
         self.input_thread.start()
+        self.found_thread.start()
 
 
     # Sniffer methods
@@ -196,13 +207,10 @@ class Blackout:
             pass
 
 
-    def stop_sniff(self):
-        self.proc_sniff_ap.terminate()
-        self.proc_sniff_ap.join()
+    def show_summary(self):
         # Output a very simple summary of findings
         self.utils.horizontal_rule(30)
         self.to_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
-
 
     def run(self):
 
@@ -404,12 +412,16 @@ class Blackout:
                         channel = ord(pkt[Dot11Elt:3].info)
 
                         # Add Access-Point to the 'cross-process' dict
-                        self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel}
                         vendor = self.get_vendor(bssid)
+                        self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
-                        self.output_queue.put(found_ap)
+                        if not self.display_update_event.is_set():
+                            found_ap = f"\n{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n"
+                            self.output_queue.put(found_ap)
+
+                        # Set the event so the display is updated
+                        #self.display_update_event.set()
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
