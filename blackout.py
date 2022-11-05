@@ -94,10 +94,10 @@ class Blackout:
                 'store': 0})
 
         # All Processes and their termination flags
-        # (Process, flag)
+        # ( [Process, flag], ... )
         self.procs_flags = (
-            (self.proc_sniff_ap, self.terminate_sniff_ap),
-            (self.proc_sniff_clients, self.terminate_sniff_clients))
+            [self.proc_sniff_ap, self.terminate_sniff_ap],
+            [self.proc_sniff_clients, self.terminate_sniff_clients])
 
 
     def to_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
@@ -131,7 +131,10 @@ class Blackout:
             
             self.to_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
             self.to_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
-            self.to_window(self.utils.print_headers(), curses.A_BOLD)
+            headers = self.utils.print_headers()
+            self.to_window(headers, curses.A_BOLD)
+
+            sleep(5)
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
@@ -140,9 +143,9 @@ class Blackout:
             while True:
                 c = self.stdscr.getch()
                 if c == ord('q'):
-                    for _, flag in self.procs_flags:
+                    for entry in self.procs_flags:
                         # Set all process termination flags
-                        flag = True
+                        entry[1] = True
                     
                     raise KeyboardInterrupt
 
@@ -356,7 +359,7 @@ class Blackout:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            self.window.addstr(f"[!] Sniffer Error: {e}\n")
+                            self.to_window(f"[!] Sniffer Error: {e}\n")
                             Utils.log_error_to_file(traceback.format_exc())
                             
 
