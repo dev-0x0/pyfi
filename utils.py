@@ -137,7 +137,7 @@ class Utils:
  
     def choice_string(self):
         choice_str = '\n'
-        choice_str += "1) Deauthenticate ALL clients from AP"
+        choice_str += "1) Deauthenticate ALL clients from AP\n"
         choice_str += "2) Deauthenticate specific client from AP (sniff clients)\n"
         choice_str += "[*] Enter choice: "
 

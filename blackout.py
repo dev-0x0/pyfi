@@ -397,8 +397,8 @@ class Blackout:
         outputs = [
             self.utils.horizontal_rule(30),
             f"\nSelected Access Point [{target_id}]\n",
-            f"\tssid:\t\t{target_ap['ssid']:20}",
-            f"\tbssid:\t\t{target_ap['bssid']:20}",
+            f"\tssid:\t\t{target_ap['ssid']:20}\n",
+            f"\tbssid:\t\t{target_ap['bssid']:20}\n",
             f"\tchannel:\t\t{target_ap['channel']:20}\n",
             self.utils.horizontal_rule(30)]
 
