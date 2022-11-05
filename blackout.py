@@ -97,7 +97,7 @@ class Blackout:
             (self.proc_sniff_clients, self.terminate_sniff_clients))
 
 
-    def write_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
+    def to_window(self, text='\n', attr=curses.A_NORMAL, y=None, x=None):
 
         if y and x:
             self.window.addstr(y+2, x, text, attr)
@@ -125,9 +125,9 @@ class Blackout:
             # Start daemon thread
             self.thread_channel_hop.start()
             
-            self.write_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
-            self.write_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
-            self.write_windows(self.utils.print_headers(), curses.A_BOLD)
+            self.to_window("[+] Sniffing for Access Points on all channels\n", curses.color_pair(227))
+            self.to_window("[+] Press SPACE to select a target. Q to quit.\n", curses.color_pair(227))
+            self.to_window(self.utils.print_headers(), curses.A_BOLD)
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
@@ -145,7 +145,7 @@ class Blackout:
                 if c == ord(' '):
                     # Terminate AP sniffer Process
                     # Move to target selection phase
-                    self.write_window("[+] You pressed SPACE....")
+                    self.to_window("[+] You pressed SPACE....")
                     break
 
             # Wait for processes to terminate
@@ -153,7 +153,7 @@ class Blackout:
 
             # Output a very simple summary of findings
             self.utils.horizontal_rule(30, self.window)
-            self.write_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
+            self.to_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
@@ -188,7 +188,7 @@ class Blackout:
                     self.target_client)
 
         except Exception as e:
-            self.write_window("blackout.run: {}\n".format(e), curses.A_NORMAL)
+            self.to_window("blackout.run: {}\n".format(e), curses.A_NORMAL)
             Utils.log_error_to_file(traceback.format_exc())
 
         except KeyboardInterrupt:
@@ -348,7 +348,7 @@ class Blackout:
                         # Output the catch
                         #self.sniffer_window.addstr(f"%2d)\t{Colour.OKBLUE}%-20s\t{Colour.OKGREEN}%-20s\t{Colour.ENDC}%2d\t\t%-20s\n" % (
                         #    count, ssid, bssid, channel, vendor))
-                        self.write_window(f"{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
+                        self.to_window(f"{count})\t{ssid}\t{bssid}\t{channel}\t\t{vendor}\n", curses.A_BOLD)
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
@@ -429,7 +429,7 @@ class Blackout:
                 #TODO return string from function and print that instead
                 self.utils.stop_mon(self.stdscr, self.window)
 
-                self.write_window("[!] You pressed 'q'...\n")
+                self.to_window("[!] You pressed 'q'...\n")
 
                 sleep(5)
 
