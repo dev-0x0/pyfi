@@ -147,7 +147,7 @@ class Blackout:
                         # Set all process termination flags
                         entry[1] = True
                     
-                    raise KeyboardInterrupt
+                    self.exit_application()
 
                 if c == ord(' '):
                     # Terminate AP sniffer Process
@@ -176,9 +176,6 @@ class Blackout:
                     self.target_ap['bssid'],
                     str(self.target_ap['channel']),
                     BROADCAST_ADDR)
-
-            # Deauth specific client from AP
-            elif choice == '2':
                 self.utils.horizontal_rule(30)
                 self.window_write(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
                # print(f"{Colour.OKBLUE}Press Ctrl-c to select target{Colour.ENDC}\n")
@@ -403,6 +400,33 @@ class Blackout:
                     break
                 except Exception as e:
                     pass
+
+
+    def exit_curses(self):
+        # End curses
+        curses.nocbreak()
+        self.stdscr.keypad(False)
+        curses.echo()
+        curses.endwin()
+
+    
+    def exit_application(self):
+
+        self.to_window("[!!] Exiting...\n")
+
+        for proc, _ in self.procs_flags:
+            try:
+                proc.terminate()
+                proc.join()
+            except Exception as e:
+                self.to_window(f"exit-application: {e}")
+
+        self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
+        self.utils.stop_mon()
+        
+        self.to_window("[!!] Exiting curses...")
+        self.exit_curses()
+        sys.exit(0)
 
 
     def signal_handler(self, sig, stack_frame):
