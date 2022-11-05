@@ -15,12 +15,12 @@ import re
 import sys
 import signal
 import curses
-import pickle
 import logging
 import argparse
 import traceback
 from time import sleep
 from utils import Utils
+from triggerlist import TriggerList
 from subprocess import Popen, PIPE
 from threading import Thread
 from multiprocessing import Process, Manager, Event
@@ -33,6 +33,14 @@ conf.verb = 0
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
 BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
+
+
+class INFO:
+    AP = 0
+    CLIENT = 1
+    SETUP = 3
+    PROMPT = 4
+    INPUT = 5
 
 
 class Blackout:
@@ -65,6 +73,7 @@ class Blackout:
 
         # Declare some necessary variables
         self.displays = {'screen': self.stdscr, 'window': self.window}
+        self.main_display = TriggerList(self.update_display)
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
@@ -90,15 +99,11 @@ class Blackout:
         self.input_thread = Thread(target=self.fetch_input)
         self.input_thread.daemon = True
 
-        # Events used to determine what we display
-        self.ap_display_update_event = Event()
-        self.ap_display_update_event.set()
-        self.client_display_update_event = Event()
-        self.client_display_update_event.set()
+        self.ap_update_event = Event()
+        self.ap_update_event.set()
 
-
-        # Thread event for stopping input/output threads
-        #self.event = Event()
+        self.client_update_event = Event()
+        self.client_update_event.set()
 
         # AP sniffer Process
         self.proc_sniff_ap = Process(
@@ -126,29 +131,37 @@ class Blackout:
     ##################
 
     def fetch_output(self):
-        while self.ap_display_update_event.is_set():
+        while self.ap_update_event.is_set():
             if not self.output_queue.empty():
                 # If False, we are done retrieving sniffed information
-                self.to_window(self.output_queue.get())
+                self.main_display.append([INFO.AP, self.output_queue.get()])
 
     
     def fetch_input(self):
         while True:
             user_input = self.stdscr.getch()
 
-            if user_input in (ord('q'), ord('Q')):
+            if user_input == ord('q'):
                 self.exit_application('thread')
             
             elif user_input == ord('s'):
-                #self.to_window("Pressed [S]")
-                if self.ap_display_update_event.is_set():
-                    self.ap_display_update_event.clear()
-                    #self.to_window(f"event is {self.ap_display_update_event.is_set()}")
+                if self.ap_update_event.is_set():
+                    self.ap_update_event.clear()
                     self.show_summary()
-                elif self.client_display_update_event.is_set():
-                    self.client_display_update_event.clear()
+                elif self.client_update_event.is_set():
+                    self.client_update_event.clear()
 
-            
+        
+    def update_display(self):
+        self.window.erase()
+        self.refresh_screen()
+
+        for _, line in self.main_display:
+            self.to_window(line)
+
+        self.refresh_screen()
+        sleep(1)
+
 
     # Curses display methods
     ########################
@@ -159,14 +172,15 @@ class Blackout:
 
     def to_window(self, text, attr=curses.A_NORMAL, y=None, x=None):
 
-        if y and x:
-            self.displays['window'].addstr(y+2, x, text, attr)
+        # if y and x:
+        #     self.displays['window'].addstr(y+2, x, text, attr)
 
-        else:
-            y, x = self.displays['screen'].getyx()
-            self.displays['screen'].move(y+2, x+1)
-            self.displays['window'].addstr(text, attr)
+        # else:
+        #     y, x = self.displays['screen'].getyx()
+        #     self.displays['screen'].move(y+2, x+1)
+        #     self.displays['window'].addstr(text, attr)
 
+        self.window.addstr(text)
         self.refresh_screen()
 
 
@@ -174,8 +188,9 @@ class Blackout:
     ###################
     
     def interface_setup(self):
-        self.to_window(f"[+] Putting {self.iface} into MONITOR mode...\n", attr=curses.color_pair(227))
-        self.to_window(f"[+] Stopping any interfering processes...", attr=curses.color_pair(227))
+        self.main_display.append([INFO.SETUP, f"[+] Putting {self.iface} into MONITOR mode...\n"])
+        self.main_display.append([INFO.SETUP, f"[+] Stopping any interfering processes..."])
+
         status = self.utils.start_mon()
 
         if status is False:
@@ -187,16 +202,15 @@ class Blackout:
         self.output_thread.start()
         self.input_thread.start()
 
-
     # Sniffer methods
     #################
 
     def start_sniff(self, phase='ap'):
         
         if phase == 'ap':
-            self.to_window("[+] Sniffing for Access Points on all channels\n", attr=curses.color_pair(227))
-            self.to_window("[+] Press [ENTER] to select a target. 'q' to quit.\n", attr=curses.color_pair(227))
-            self.to_window(self.utils.print_headers(), attr=curses.A_BOLD)
+            self.main_display.append([INFO.SETUP, "[+] Sniffing for Access Points on all channels\n"])
+            self.main_display.append([INFO.SETUP, "[+] Press [ENTER] to select a target. 'q' to quit.\n"])
+            self.main_display.append([INFO.SETUP, self.utils.print_headers()])
 
             # Sniff for Wireless Access Points
             self.proc_sniff_ap.start()
@@ -207,8 +221,9 @@ class Blackout:
 
     def show_summary(self):
         # Output a very simple summary of findings
-        self.utils.horizontal_rule(30)
-        self.to_window(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n", curses.A_BOLD)
+        self.main_display.append([INFO.SETUP, self.utils.horizontal_rule(30)])
+        self.main_display.append([INFO.SETUP, f"\nAccess Points discovered: {len(self.ap_dict)}\n\n"])
+
 
     def run(self):
 
@@ -221,9 +236,10 @@ class Blackout:
             self.start_threads()
             self.start_sniff(phase='ap')
         
-            # Get user input with curses
-            # while True:
-            #     pass
+            # Wait for user to end AP sniffing phase
+            # TODO: This feels too hacky, fix this
+            while self.ap_update_event.is_set():
+                pass
 
             # Select an target AP
             self.target_ap = self.select_target_ap()
@@ -231,7 +247,7 @@ class Blackout:
             # Make it all upper-case for comparisons in self.sniff_clients
             self.target_bssid = self.target_ap['bssid'].upper()
 
-            self.to_window(self.utils.choice_string())
+            self.main_display.append([INFO.PROMPT, self.utils.choice_string()])
             choice = self.stdscr.getch()
 
             # Deuth ALL clients from AP
@@ -363,13 +379,9 @@ class Blackout:
 
 
     def select_target_ap(self):
-        self.utils.horizontal_rule(30)
-
+        self.to_window(self.utils.horizontal_rule(30))
         self.to_window("\nEnter ID of the AP you wish to target: ")
-        # Show this input on display
-        curses.echo()
         target_id = self.stdscr.getch()
-        curses.noecho()
 
         #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
         target_ap = self.ap_dict[target_id]
