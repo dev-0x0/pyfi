@@ -132,9 +132,9 @@ class Blackout:
     # Thread methods
     ##################
 
-    def fetch_output(self):
-        while self.ap_update_event.is_set():
-            self.main_display.append(self.output_queue.get())
+    # def fetch_output(self):
+    #     while self.ap_update_event.is_set():
+    #         self.main_display.append(self.output_queue.get())
 
     
     def fetch_input(self):
@@ -442,8 +442,9 @@ class Blackout:
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
-                        self.main_display.append(found_ap)
+                        if self.ap_update_event.is_set():
+                            found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
+                            self.main_display.append(found_ap)
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
