@@ -240,7 +240,7 @@ class Blackout:
                 pass
 
             # Give a chance to stop outputs
-            sleep(1)
+            sleep(2)
             self.show_summary()
 
             self.target_ap = self.select_target_ap()
