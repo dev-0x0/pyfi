@@ -92,8 +92,8 @@ class Blackout:
         self.thread_channel_hop.daemon = True
 
         # Create thread to output data from processes to main curses screen
-        self.output_thread = Thread(target=self.fetch_output)
-        self.output_thread.daemon = True
+        # self.output_thread = Thread(target=self.fetch_output)
+        # self.output_thread.daemon = True
 
         # Create thread to listen for user input
         self.input_thread = Thread(target=self.fetch_input)
