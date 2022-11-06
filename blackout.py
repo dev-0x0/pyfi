@@ -240,7 +240,7 @@ class Blackout:
                 pass
 
             # Give a chance to stop outputs
-            sleep(2)
+            sleep(1)
             self.show_summary()
 
             self.target_ap = self.select_target_ap()
@@ -249,16 +249,19 @@ class Blackout:
             self.target_bssid = self.target_ap['bssid'].upper()
 
             self.main_display.append(self.utils.choice_string())
-            choice = self.stdscr.getch()
+            choice = chr(self.stdscr.getch())
+            self.main_display.append(choice)
 
-            # Deuth ALL clients from AP
-            if choice == ord('1'):
+            # Deuth all clients from AP
+            if choice == '1':
                 self.deauth(
                     self.target_ap['bssid'],
                     str(self.target_ap['channel']),
                     BROADCAST_ADDR)
-                self.utils.horizontal_rule(30)
-                self.to_window(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
+
+            if choice == '2':
+                self.main_display.append(self.utils.horizontal_rule(30))
+                self.main_display.append(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
 
                 self.proc_sniff_clients.start()
                 self.proc_sniff_clients.join()
@@ -370,13 +373,12 @@ class Blackout:
             print(f"[*] sniff_clients error: {e}")
 
 
-    # def list_clients(self):
-    #     print("\n")
-    #     self.utils.horizontal_rule(20)
-    #     for i, client in enumerate(self.ap_clients):
-    #         # Find manufacturer
-    #         name = self.get_vendor(client)
-    #         print(f"{i + 1}) {client}\t{name}")
+    def list_clients(self):
+        self.main_display.append(self.utils.horizontal_rule(20))
+        for i, client in enumerate(self.ap_clients):
+            # Find manufacturer
+            name = self.get_vendor(client)
+            self.main_display.append(f"{i + 1}) {client}\t{name}")
 
 
     def select_target_ap(self):
@@ -397,9 +399,9 @@ class Blackout:
         outputs = [
             self.utils.horizontal_rule(30),
             f"\nSelected Access Point [{target_id}]\n",
-            f"\tssid:\t\t{target_ap['ssid']:20}\n",
-            f"\tbssid:\t\t{target_ap['bssid']:20}\n",
-            f"\tchannel:\t\t{target_ap['channel']:20}\n",
+            f"\tssid:\t\t{target_ap['ssid']}\n",
+            f"\tbssid:\t\t{target_ap['bssid']}\n",
+            f"\tchannel:\t\t{target_ap['channel']}\n",
             self.utils.horizontal_rule(30)]
 
         for out in outputs: self.main_display.append(out)
