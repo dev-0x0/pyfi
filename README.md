@@ -1,4 +1,4 @@
-# Wi-Fi Deauthentication Tool - CURRENTLY UNDERGOING REFACTORING
+# Wi-Fi Deauthentication Tool - (Currently undergoing refactoring)
 
 This tool:
 - Enumerates local wireless access points and clients
