@@ -1,7 +1,7 @@
-# Wi-Fi Deauthentication Tool - (Currently undergoing refactoring)
+# Wi-Fi Deauthentication Tool
 
 This tool:
-- Uses a curses terminal UI (Currently undergoing significant refactoring)
+- Uses a curses terminal UI (Currently refactoring)
 - Enumerates local wireless access points and clients
 - Allows for selection of access points or clients for deauthentication from the wireless network
 - Allows for various other attacks (e.g MITM)
