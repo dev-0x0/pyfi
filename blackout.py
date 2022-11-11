@@ -317,6 +317,7 @@ class Blackout:
             # for now I found this to be more reliable.
             try:
                 while self.deauth_active:
+                    self.main_display.append(".")
                     sendp(deauth_pkt, inter=0.1, count=1, iface=conf.iface)
 
             except KeyboardInterrupt:
