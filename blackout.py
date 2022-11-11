@@ -337,6 +337,7 @@ class Blackout:
     def sniff_access_points(self, pkt):
         """
         Sniff packets, and extract info from them
+        addr1=destination, addr2=source, addr3=bssid
         """
         # Here scapy is going to check whether each sniffed packet
         # has particular 'layers' of encapsulation
@@ -380,6 +381,9 @@ class Blackout:
                             Utils.log_error_to_file(traceback.format_exc())
 
     def sniff_clients(self, pkt):
+        """
+        addr1=destination, addr2=source, addr3=bssid
+        """
 
         if not self.client_update_event.is_set():
             return
