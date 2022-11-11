@@ -61,6 +61,7 @@ class Blackout:
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
+        self.target_id = None
 
         self.thread_channel_hop = Thread(
             target=Blackout.channel_hop,
@@ -99,15 +100,24 @@ class Blackout:
         # A flag to indicate deauth is in progress
         self.deauth_active = False
 
+        # Indicates whether we are targetting an AP or Clients
+        self.phase = 'AP'
+
+        # Flag indicating user is choosing deauth option
+        self.choosing = False
+        # Holds the users menu choice as integer
+        self.choice = None
+
     
     def fetch_input(self):
         while True:
             user_input = self.stdscr.getch()
+            user_input = chr(user_input)
 
-            if user_input == ord('q'):
+            if user_input == 'q':
                 self.exit_application('thread')
             
-            elif user_input == ord('s'):
+            if user_input == 's':
                 if self.deauth_active:
                     # Stop deauthentication
                     self.deauth_active = False
@@ -115,6 +125,13 @@ class Blackout:
                     self.ap_update_event.clear()
                 elif self.client_update_event.is_set():
                     self.client_update_event.clear()
+
+            if user_input.isdigit():
+                if self.choosing:
+                    self.choice = user_input
+                    self.choosing = False
+                else:
+                    self.target_id = int(user_input)    
 
         
     def update_display(self):
@@ -145,31 +162,104 @@ class Blackout:
         if status is False:
             raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
 
+
     def start_threads(self):
         # Start daemon threads
         self.thread_channel_hop.start()
         self.input_thread.start()
 
 
-    def start_sniff(self, phase='ap'):
-        
-        if phase == 'ap':
+    def start_sniff(self):
+        if self.phase == 'AP':
             self.main_display.append("[+] Sniffing for Access Points on all channels\n")
             self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
             self.main_display.append(self.utils.print_headers())
             self.sniff_ap_thread.start()
 
-        if phase == 'client':
+        if self.phase == 'client':
             self.main_display.append(self.utils.horizontal_rule(30))
             self.main_display.append(f"\n[*] Sniffing for clients of AP - {self.target_ap['bssid']}...\n")
             self.main_display.append("[*] Press 's' to stop. 'q' to quit\n\n")
             self.proc_sniff_clients.start()
 
+        event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
+        # Wait for user to end client sniffing phase
+        # TODO: This seems very inelegant, fix this
+        while event.is_set(): pass
+        sleep(2)
+        self.show_summary()
+
 
     def show_summary(self):
         # Output a very simple summary of findings
         self.main_display.append(self.utils.horizontal_rule(30))
-        self.main_display.append(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n")
+
+        if self.phase == 'AP':
+            self.main_display.append(f"Access Points discovered: {len(self.ap_dict)}\n\n")
+        elif self.phase == 'client':
+            self.main_display.append(f"Clients discovered: {len(self.ap_clients)}\n\n")
+
+    
+    def deauth_menu_choice(self):
+        self.main_display.append(self.utils.choice_string())
+        self.choosing = True
+        while self.choosing and self.choice is None: pass
+
+    
+    def start_deauth(self):
+        self.deauth_menu_choice()
+
+        # Deuth all clients from AP
+        if self.choice == '1':
+            self.choice = None
+            self.main_display.append("deauthing...")
+            self.deauth(
+                self.target_ap['bssid'],
+                str(self.target_ap['channel']),
+                BROADCAST_ADDR)
+
+        elif self.choice == '2':
+            self.choice = None
+            self.phase = 'client'
+            self.start_sniff()
+            self.select_target()
+            self.deauth(
+                self.target_ap['bssid'],
+                str(self.target_ap['channel']),
+                self.target_client)
+
+    
+    def select_target(self, phase='AP'):
+        self.target_id = None
+        self.main_display.append(self.utils.horizontal_rule(30))
+        self.main_display.append(f"\n[?] Enter ID of the {self.phase} you wish to target: ")
+
+        # TODO: There may be a better way
+        while self.target_id is None: pass
+        self.main_display.append(str(self.target_id))
+
+        if phase == 'AP':
+            #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
+            self.target_ap = self.ap_dict[self.target_id]
+
+            outputs = [
+                self.utils.horizontal_rule(30),
+                f"\nSelected Access Point [{self.target_id}]\n",
+                f"\tssid:\t\t{self.target_ap['ssid']}\n",
+                f"\tbssid:\t\t{self.target_ap['bssid']}\n",
+                f"\tchannel:\t\t{self.target_ap['channel']}\n",
+                self.utils.horizontal_rule(30)]
+
+            for out in outputs: self.main_display.append(out)
+
+        elif phase == 'client':
+            #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
+            # [{'1': [client info, ]}, {'2', [client info, ... ]}, ... ]
+            self.target_client = self.ap_clients[self.target_id - 1]
+
+            self.main_display.append(self.utils.horizontal_rule(30))
+            self.main_display.append(f"Targeting Client: [{self.target_client}]\n")
+            self.main_display.append(self.utils.horizontal_rule(30))
 
 
     def run(self):
@@ -181,52 +271,9 @@ class Blackout:
         try:
             self.interface_setup()
             self.start_threads()
-            self.start_sniff(phase='ap')
-        
-            # Wait for user to end AP sniffing phase
-            # TODO: This seems very inelegant, fix this
-            while self.ap_update_event.is_set():
-                pass
-
-            # Give a chance to stop outputs
-            sleep(2)
-            self.show_summary()
-
-            self.target_ap = self.select_target_ap()
-            
-            # Make it all upper-case for comparisons in self.sniff_clients
-            self.target_bssid = self.target_ap['bssid'].upper()
-
-            self.main_display.append(self.utils.choice_string())
-            choice = chr(self.stdscr.getch())
-            self.main_display.append(choice)
-
-            # Deuth all clients from AP
-            if choice == '1':
-
-                self.deauth(
-                    self.target_ap['bssid'],
-                    str(self.target_ap['channel']),
-                    BROADCAST_ADDR)
-
-            elif choice == '2':
-
-                self.start_sniff(phase='client')
-
-                # Wait for user to end client sniffing phase
-                # TODO: This seems very inelegant, fix this
-                while self.client_update_event.is_set():
-                    pass
-
-                sleep(2)
-
-                self.list_clients()
-                self.select_target_client()
-
-                self.deauth(
-                    self.target_ap['bssid'],
-                    str(self.target_ap['channel']),
-                    self.target_client)
+            self.start_sniff()
+            self.select_target()
+            self.start_deauth()
 
         except Exception as e:
             self.main_display.append(f"[!] Error: {e}\n")
@@ -285,93 +332,6 @@ class Blackout:
             print(f"[!] Error while Deauthenticating: {e}\n")
 
 
-    def select_target_client(self):
-        self.main_display.append(self.utils.horizontal_rule(30))
-
-        target_id = int(input("\nEnter ID of the client you wish to target: "))
-
-        #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
-        # [{'1': [client info, ]}, {'2', [client info, ... ]}, ... ]
-        self.target_client = self.ap_clients[target_id - 1]
-
-        self.utils.horizontal_rule(30)
-        print(f"\nTargeting Client: [{self.target_client}]\n")
-        self.utils.horizontal_rule(30)
-
-
-    def sniff_clients(self, pkt):
-
-        if not self.client_update_event.is_set():
-            return
-
-        # Go to correct channel
-        channel = str(self.target_ap['channel'])
-        go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
-        go_to_chan.communicate()
-
-        # IF right type of frame, and not involved in authentication
-        try:
-            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2): # and not pkt.haslayer(EAPOL):
-                # Packet is a Data or Control Frame
-                if pkt.addr1 and pkt.addr2:
-
-                    # Get destination and source MAC addresses
-                    dst = pkt.addr1.upper()
-                    src = pkt.addr2.upper()
-
-                    # If the target AP is either source or destination, we know the other is a client
-                    if BROADCAST_ADDR not in (dst, src):
-                        if src == self.target_bssid and dst not in self.ap_clients:
-                            self.ap_clients.append(dst)
-                            self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
-
-                        elif dst == self.target_bssid and src not in self.ap_clients:
-                            self.ap_clients.append(src)
-                            self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
-
-        except Exception as e:
-            self.main_display.append(f"[*] sniff_clients error: {e}\n")
-
-        except KeyboardInterrupt:
-            pass
-
-
-    def list_clients(self):
-        self.main_display.append(self.utils.horizontal_rule(20))
-        for i, client in enumerate(self.ap_clients):
-            # Find manufacturer
-            name = self.get_vendor(client)
-            self.main_display.append(f"{i + 1}) {client}\t{name}\n")
-
-
-    def select_target_ap(self):
-        
-        outputs = [
-            self.utils.horizontal_rule(30),
-            "\nEnter ID of the AP you wish to target: "]
-        
-        for out in outputs: self.main_display.append(out)
-
-        target_id = chr(self.stdscr.getch())
-  
-        self.main_display.append(str(target_id))
-
-        #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
-        target_ap = self.ap_dict[int(target_id)]
-
-        outputs = [
-            self.utils.horizontal_rule(30),
-            f"\nSelected Access Point [{target_id}]\n",
-            f"\tssid:\t\t{target_ap['ssid']}\n",
-            f"\tbssid:\t\t{target_ap['bssid']}\n",
-            f"\tchannel:\t\t{target_ap['channel']}\n",
-            self.utils.horizontal_rule(30)]
-
-        for out in outputs: self.main_display.append(out)
-
-        return target_ap
-
-
     def sniff_access_points(self, pkt):
         """
         Sniff packets, and extract info from them
@@ -416,6 +376,42 @@ class Blackout:
                             pass
                         else:
                             Utils.log_error_to_file(traceback.format_exc())
+
+    def sniff_clients(self, pkt):
+
+        if not self.client_update_event.is_set():
+            return
+
+        # Go to correct channel
+        channel = str(self.target_ap['channel'])
+        go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
+        go_to_chan.communicate()
+
+        # IF right type of frame, and not involved in authentication
+        try:
+            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2): # and not pkt.haslayer(EAPOL):
+                # Packet is a Data or Control Frame
+                if pkt.addr1 and pkt.addr2:
+
+                    # Get destination and source MAC addresses
+                    dst = pkt.addr1.upper()
+                    src = pkt.addr2.upper()
+
+                    # If the target AP is either source or destination, we know the other is a client
+                    if BROADCAST_ADDR not in (dst, src):
+                        if src == self.target_bssid and dst not in self.ap_clients:
+                            self.ap_clients.append(dst)
+                            self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
+
+                        elif dst == self.target_bssid and src not in self.ap_clients:
+                            self.ap_clients.append(src)
+                            self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
+
+        except Exception as e:
+            self.main_display.append(f"[*] sniff_clients error: {e}\n")
+
+        except KeyboardInterrupt:
+            pass
                             
 
     # TODO move to utils

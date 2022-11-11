@@ -141,9 +141,6 @@ class Utils:
         choice_str += "2) Deauthenticate specific client from AP (sniff clients)\n"
         choice_str += "[*] Enter choice: "
 
-        # while choice not in ('1', '2'):
-            # print("[!] Please enter a valid choice\n")
-
         return choice_str
 
 
