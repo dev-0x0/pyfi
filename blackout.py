@@ -121,9 +121,9 @@ class Blackout:
                 if self.deauth_active:
                     # Stop deauthentication
                     self.deauth_active = False
-                elif self.ap_update_event.is_set():
+                elif self.phase == 'AP' and self.ap_update_event.is_set():
                     self.ap_update_event.clear()
-                elif self.client_update_event.is_set():
+                elif self.phase == 'client' and self.client_update_event.is_set():
                     self.client_update_event.clear()
 
             if user_input.isdigit():
@@ -170,6 +170,9 @@ class Blackout:
 
 
     def start_sniff(self):
+        event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
+        self.main_display.append(repr(event))
+
         if self.phase == 'AP':
             self.main_display.append("[+] Sniffing for Access Points on all channels\n")
             self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
@@ -182,7 +185,6 @@ class Blackout:
             self.main_display.append("[*] Press 's' to stop. 'q' to quit\n\n")
             self.proc_sniff_clients.start()
 
-        event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
         # Wait for user to end client sniffing phase
         # TODO: This seems very inelegant, fix this
         while event.is_set(): pass
@@ -400,15 +402,17 @@ class Blackout:
                     # If the target AP is either source or destination, we know the other is a client
                     if BROADCAST_ADDR not in (dst, src):
                         if src == self.target_bssid and dst not in self.ap_clients:
+                            self.main_display.append("here 1\n")
                             self.ap_clients.append(dst)
                             self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
 
                         elif dst == self.target_bssid and src not in self.ap_clients:
+                            self.main_display.append("here 2\n")
                             self.ap_clients.append(src)
                             self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
 
         except Exception as e:
-            self.main_display.append(f"[*] sniff_clients error: {e}\n")
+            Utils.log_error_to_file(traceback.format_exc())
 
         except KeyboardInterrupt:
             pass
