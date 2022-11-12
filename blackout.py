@@ -167,21 +167,23 @@ class Blackout:
         """
         Start sniffing for access points and any connected clients
         """
-        
+
         event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
-        self.main_display.append(repr(event))
 
-        if self.phase == 'AP':
-            self.main_display.append("[+] Sniffing for Access Points on all channels\n")
-            self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
-            self.main_display.append(self.utils.print_headers())
-            self.sniff_ap_thread.start()
+        self.main_display.append("[+] Sniffing Access Points on all channels\n")
+        self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
 
-        if self.phase == 'client':
-            self.main_display.append(self.utils.horizontal_rule(30))
-            self.main_display.append(f"\n[*] Sniffing for clients of AP - {self.target_ap['bssid']}...\n")
-            self.main_display.append("[*] Press 's' to stop. 'q' to quit\n\n")
-            self.proc_sniff_clients.start()
+        # if self.phase == 'AP':
+        #     self.main_display.append("[+] Sniffing for Access Points on all channels\n")
+        #     self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
+        #     self.main_display.append(self.utils.print_headers())
+        #     self.sniff_ap_thread.start()
+
+        # if self.phase == 'client':
+        #     self.main_display.append(self.utils.horizontal_rule(30))
+        #     self.main_display.append(f"\n[*] Sniffing for clients of AP - {self.target_ap['bssid']}...\n")
+        #     self.main_display.append("[*] Press 's' to stop. 'q' to quit\n\n")
+        #     self.proc_sniff_clients.start()
 
         # Wait for user to end client sniffing phase
         # TODO: This seems very inelegant, fix this
