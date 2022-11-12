@@ -11,7 +11,7 @@ import sys
 import signal
 import curses
 import logging
-#import argparse
+# import argparse
 import traceback
 from time import sleep
 from utils import Utils
@@ -27,6 +27,7 @@ conf.verb = 0
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
 BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
+
 
 class INFO:
     AP = 0
@@ -96,7 +97,6 @@ class Blackout:
                 'iface': conf.iface,
                 'store': 0})
 
-
         # A flag to indicate deauth is in progress
         self.deauth_active = False
 
@@ -108,7 +108,6 @@ class Blackout:
         # Holds the users menu choice as integer
         self.choice = None
 
-    
     def fetch_input(self):
         while True:
             user_input = self.stdscr.getch()
@@ -116,7 +115,7 @@ class Blackout:
 
             if user_input == 'q':
                 self.exit_application('thread')
-            
+
             if user_input == 's':
                 if self.deauth_active:
                     # Stop deauthentication
@@ -131,9 +130,8 @@ class Blackout:
                     self.choice = user_input
                     self.choosing = False
                 else:
-                    self.target_id = int(user_input)    
+                    self.target_id = int(user_input)
 
-        
     def update_display(self):
         self.window.erase()
         self.refresh_screen()
@@ -143,7 +141,6 @@ class Blackout:
 
         self.refresh_screen()
 
-
     def refresh_screen(self):
         self.window.noutrefresh()
         curses.doupdate()
@@ -152,7 +149,6 @@ class Blackout:
         self.window.addstr(text)
         self.refresh_screen()
 
-    
     def interface_setup(self):
         self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
         self.main_display.append(f"[+] Stopping any interfering processes...\n")
@@ -162,14 +158,16 @@ class Blackout:
         if status is False:
             raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
 
-
     def start_threads(self):
         # Start daemon threads
         self.thread_channel_hop.start()
         self.input_thread.start()
 
-
     def start_sniff(self):
+        """
+        Start sniffing for access points and any connected clients
+        """
+        
         event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
         self.main_display.append(repr(event))
 
@@ -191,7 +189,6 @@ class Blackout:
         sleep(2)
         self.show_summary()
 
-
     def show_summary(self):
         # Output a very simple summary of findings
         self.main_display.append(self.utils.horizontal_rule(30))
@@ -201,13 +198,11 @@ class Blackout:
         elif self.phase == 'client':
             self.main_display.append(f"Clients discovered: {len(self.ap_clients)}\n\n")
 
-    
     def deauth_menu_choice(self):
         self.main_display.append(self.utils.choice_string())
         self.choosing = True
         while self.choosing and self.choice is None: pass
 
-    
     def start_deauth(self):
         self.deauth_menu_choice()
 
@@ -230,14 +225,15 @@ class Blackout:
                 str(self.target_ap['channel']),
                 self.target_client)
 
-    
     def select_target(self, phase='AP'):
         self.target_id = None
         self.main_display.append(self.utils.horizontal_rule(30))
         self.main_display.append(f"\n[?] Enter ID of the {self.phase} you wish to target: ")
 
         # TODO: There may be a better way
-        while self.target_id is None: pass
+        while self.target_id is None:
+            pass
+
         self.main_display.append(str(self.target_id))
 
         if phase == 'AP':
@@ -263,7 +259,6 @@ class Blackout:
             self.main_display.append(f"Targeting Client: [{self.target_client}]\n")
             self.main_display.append(self.utils.horizontal_rule(30))
 
-
     def run(self):
 
         # clear screen
@@ -288,7 +283,6 @@ class Blackout:
             self.main_display.append("[!] Exiting...\n")
             sleep(2)
 
-
     def deauth(self, bssid, channel, target):
         """
         create deauth packets and send them to the target AP
@@ -300,7 +294,7 @@ class Blackout:
             self.main_display.append(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
         else:
             self.main_display.append(f"[*] deauth {target} from {bssid} on channel {channel}...\n")
-        
+
         self.main_display.append("[*] Press 's' to stop.\n")
 
         try:
@@ -334,7 +328,6 @@ class Blackout:
         except Exception as e:
             print(f"[!] Error while Deauthenticating: {e}\n")
 
-
     def sniff_access_points(self, pkt):
         """
         Sniff packets, and extract info from them
@@ -350,7 +343,7 @@ class Blackout:
         if pkt.haslayer(Dot11):
             # Check for beacon frames or probe responses from AP's
             if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
-                
+
                 # If the packet contains a BSSID we have not encountered
                 if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
                     bssid = pkt.addr3.upper()  # add the bssid to our bssid list
@@ -396,7 +389,7 @@ class Blackout:
 
         # IF right type of frame, and not involved in authentication
         try:
-            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2): # and not pkt.haslayer(EAPOL):
+            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):  # and not pkt.haslayer(EAPOL):
                 # Packet is a Data or Control Frame
                 if pkt.addr1 and pkt.addr2:
 
@@ -421,7 +414,6 @@ class Blackout:
 
         except KeyboardInterrupt:
             pass
-                            
 
     # TODO move to utils
     def get_vendor(self, bssid):
@@ -444,16 +436,16 @@ class Blackout:
         limit = 14
 
         while True:
-            for i in range(1, 14): 
+            for i in range(1, 14):
                 channel = i % limit
-                #print(channel)
+                # print(channel)
 
                 # using Popen instead of os.system here avoids superfluous
                 # output to the terminal from the iw command
                 # which at times can crash the program (I'm not sure why yet)
                 # Note: I don't seem to need to PIPE any outputs(stdout etc.) for this to work
 
-                #print("{} - {}".format(conf.iface, type(conf.iface)))
+                # print("{} - {}".format(conf.iface, type(conf.iface)))
                 p = Popen(["iw", "dev", iface, "set", "channel", str(channel)])
                 try:
                     # effectively execute p
@@ -464,7 +456,6 @@ class Blackout:
                 except Exception as e:
                     pass
 
-
     def exit_curses(self):
         # End curses
         curses.nocbreak()
@@ -472,11 +463,10 @@ class Blackout:
         curses.echo()
         curses.endwin()
 
-    
     def exit_application(self, source='main'):
 
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
-        
+
         status = self.utils.stop_mon()
         if not status:
             raise Exception("[!] Error putting {self.iface} into MANAGED mode")
@@ -485,10 +475,9 @@ class Blackout:
 
         if source == 'thread':
             os._exit(1)
-        
+
         if source == 'main':
             sys.exit(0)
-
 
     def start_curses(self):
         # Setup curses
@@ -507,15 +496,14 @@ class Blackout:
 
         HEIGHT, WIDTH = stdscr.getmaxyx()
 
-        window = curses.newwin(HEIGHT-2, WIDTH-2, 1, 1)
-        #window.border('|', '|', '-', '-', '+', '+', '+', '+')
-        
+        window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
+        # window.border('|', '|', '-', '-', '+', '+', '+', '+')
+
         stdscr.noutrefresh()
         window.noutrefresh()
         curses.doupdate()
 
         return stdscr, window
-
 
     def signal_handler(self, sig, stack_frame):
         """
@@ -542,5 +530,3 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         pass
-
-
