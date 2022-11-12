@@ -1,4 +1,3 @@
-
 import re
 import os
 import sys
@@ -7,6 +6,7 @@ import curses
 import traceback
 from time import sleep
 from subprocess import PIPE, Popen, check_output
+
 
 # class Colour:
 #     HEADER = '\033[95m'
@@ -19,18 +19,25 @@ from subprocess import PIPE, Popen, check_output
 #     UNDERLINE = '\033[4m'
 
 
+def choice_string():
+    choice_str = '\n'
+    choice_str += "1) Deauthenticate ALL clients from AP\n"
+    choice_str += "2) Deauthenticate specific client from AP (sniff clients)\n"
+    choice_str += "[*] Enter choice: "
+
+    return choice_str
+
+
 class Utils:
 
     def __init__(self, iface):
-        
+
         self.iface = str(iface)
         self.services = ['NetworkManager', 'wpa_supplicant']
 
-
     def horizontal_rule(self, n):
-        hr = '-'*n
-        return '\n'+hr+'\n'
-
+        hr = '-' * n
+        return '\n' + hr + '\n'
 
     def self_mac(self):
         """
@@ -46,7 +53,6 @@ class Utils:
         except AttributeError:
             mac = "Unavailable"
         return mac
-
 
     def get_mac(self):
         """
@@ -67,15 +73,12 @@ class Utils:
 
         return mac
 
-
     def service_is_active(self, service):
         # Will exit with status zero if service is active, non-zero otherwise
         return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
 
-
     def service_control(self, action, service):
         Popen(['systemctl', action, service]).communicate()
-
 
     def start_mon(self):
         """
@@ -97,7 +100,7 @@ class Utils:
             # Ex: ip link set wlan0 up
             iface_up = Popen(['ip', 'link', 'set', self.iface, 'up'])
             sleep(2)
-            
+
             iface_down.communicate()
             set_monitor_mode.communicate()
             iface_up.communicate()
@@ -107,7 +110,6 @@ class Utils:
         except Exception as e:
             Utils.log_error_to_file(traceback.format_exc())
             return False
-
 
     def stop_mon(self):
         """
@@ -128,21 +130,10 @@ class Utils:
             Utils.log_error_to_file(traceback.format_exc())
             return False
 
-
-    def print_headers(self):
-        # Print column headings
+    @staticmethod
+    def print_headers():
+        # Column headings
         return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR")
-        
-
- 
-    def choice_string(self):
-        choice_str = '\n'
-        choice_str += "1) Deauthenticate ALL clients from AP\n"
-        choice_str += "2) Deauthenticate specific client from AP (sniff clients)\n"
-        choice_str += "[*] Enter choice: "
-
-        return choice_str
-
 
     @staticmethod
     def compile_vendors():
@@ -151,9 +142,7 @@ class Utils:
             vendors = pickle.load(f)
         return vendors
 
-
     @staticmethod
     def log_error_to_file(error):
         with open('log', 'w') as f:
             f.write(str(error) + '\n')
-
