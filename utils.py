@@ -35,9 +35,9 @@ class Utils:
         self.iface = str(iface)
         self.services = ['NetworkManager', 'wpa_supplicant']
 
-    def horizontal_rule(self, n):
-        hr = '-' * n
-        return '\n' + hr + '\n'
+    @staticmethod
+    def horizontal_rule(n):
+        return '\n' + '-' * n + '\n'
 
     def self_mac(self):
         """
@@ -72,13 +72,6 @@ class Utils:
             mac = "Unavailable"
 
         return mac
-
-    def service_is_active(self, service):
-        # Will exit with status zero if service is active, non-zero otherwise
-        return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
-
-    def service_control(self, action, service):
-        Popen(['systemctl', action, service]).communicate()
 
     def start_mon(self):
         """
@@ -129,6 +122,15 @@ class Utils:
         except Exception as e:
             Utils.log_error_to_file(traceback.format_exc())
             return False
+
+    @staticmethod
+    def service_is_active(self, service):
+        # Will exit with status zero if service is active, non-zero otherwise
+        return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
+
+    @staticmethod
+    def service_control(self, action, service):
+        Popen(['systemctl', action, service]).communicate()
 
     @staticmethod
     def print_headers():

