@@ -3,7 +3,8 @@
 **Read disclaimer and warnings below before using this tool**
 
 Default operation:
-- Enumerates local wireless access points and sniffs for connected clients
+- Enumerates local wireless access points and sniffs for connected clients on all channels
+- Selects most powerful wireless interface if one is not specified
 
 Additional options:
 - Allow for deauthentication of clients from a specified wireless access point
