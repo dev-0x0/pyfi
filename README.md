@@ -1,4 +1,4 @@
-# Pyfi
+# PyFi
 
 **Read disclaimer and warnings below before using this tool**
 
