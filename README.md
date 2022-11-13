@@ -6,7 +6,7 @@ Default operation:
 - Enumerates local wireless access points and sniffs for connected clients
 
 Additional options:
-- Allow for targeted or blanket deauthentication of clients from a specified wireless access point
+- Allow for deauthentication of clients from a specified wireless access point
 - This portion of the project is a proof-of-concept for demonstrating the vulnerability of some wireless networks 
 - It is for educational purposes only, in order to learn about
 WiFi vulnerabilites, and steps sometimes taken by malicious actors when performing certain types of attacks(e.g.
@@ -19,6 +19,7 @@ MITM)
     - curses module for terminal UI
     - scapy module for packet capture, analysis and forging
     - Makes use of a custom class which implements a list that triggers actions when items are added or removed
+    - 
 ### TODO:
 - Source most up-to-date vendor database. Find a way to keep it updated
 - Incorporate all argparse parsed arguments from utils.py
