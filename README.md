@@ -1,10 +1,14 @@
-# Wi-Fi Deauthentication Tool
+# Pyfi
 
-This tool:
-- Uses a curses terminal UI (Currently refactoring)
+Default operation:
+- Uses a curses terminal UI
 - Enumerates local wireless access points and clients
-- Allows for selection of access points or clients for deauthentication from the wireless network
-- Allows for various other attacks (e.g MITM)
+
+Additional options:
+- Allow for targeted or blanket deauthentication of clients from the wireless network
+- This portion of the project is for education purposes only, in order to learn about
+WiFi vulnerabilites, and steps sometimes taken by malicious actors when performing
+MITM type attacks.
 
 DISCLAIMER:
 

@@ -36,7 +36,7 @@ class INFO:
     INPUT = 5
 
 
-class Blackout:
+class Pyfi:
 
     def __init__(self, interface, args):
 
@@ -182,23 +182,11 @@ class Blackout:
         #event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
 
         self.output("[+] Sniffing Access Points on all channels\n")
-        self.output("[+] Press 's' to select a target. 'q' to quit\n")
+        self.output("[+] Press 's' to stop and show summary. 'q' to quit\n")
         self.output(print_headers())
 
         self.sniff_ap_thread.start()
         self.sniff_clients_thread.start()
-
-        # if self.phase == 'AP':
-        #     self.main_display.append("[+] Sniffing for Access Points on all channels\n")
-        #     self.main_display.append("[+] Press 's' to select a target. 'q' to quit\n")
-        #     self.main_display.append(self.utils.print_headers())
-        #     self.sniff_ap_thread.start()
-
-        # if self.phase == 'client':
-        #     self.main_display.append(self.utils.horizontal_rule(30))
-        #     self.main_display.append(f"\n[*] Sniffing for clients of AP - {self.target_ap['bssid']}...\n")
-        #     self.main_display.append("[*] Press 's' to stop. 'q' to quit\n\n")
-        #     self.proc_sniff_clients.start()
 
         # Wait for user to end client sniffing phase
         # TODO: This seems very inelegant, fix this
@@ -605,33 +593,6 @@ class Blackout:
     def output(self, msg):
         self.main_display.append(msg)
 
-    # @staticmethod
-    # def start_curses():
-    #     # Setup curses
-    #     screen = curses.initscr()
-    #     curses.noecho()
-    #     curses.cbreak()
-    #     curses.curs_set(0)
-    #     screen.keypad(True)
-    #
-    #     # Use all the colours!
-    #     # https://stackoverflow.com/questions/18551558/how-to-use-terminal-color-palette-with-curses
-    #     curses.start_color()
-    #     curses.use_default_colors()
-    #     for i in range(0, curses.COLORS):
-    #         curses.init_pair(i + 1, i, -1)
-    #
-    #     HEIGHT, WIDTH = screen.getmaxyx()
-    #
-    #     window = curses.newwin(HEIGHT - 2, WIDTH - 2, 1, 1)
-    #     # window.border('|', '|', '-', '-', '+', '+', '+', '+')
-    #
-    #     screen.noutrefresh()
-    #     window.noutrefresh()
-    #     curses.doupdate()
-    #
-    #     return screen, window
-
 
 if __name__ == "__main__":
 
@@ -651,13 +612,13 @@ if __name__ == "__main__":
     with open('log', 'w') as f:
         f.write('')
 
-    blackout = Blackout(iface, args)
+    pyfi = Pyfi(iface, args)
 
     # Set the signal handler
-    signal.signal(signal.SIGINT, blackout.signal_handler)
+    signal.signal(signal.SIGINT, pyfi.signal_handler)
 
     try:
-        blackout.run()
+        pyfi.run()
     except Exception as e:
         log_error_to_file(traceback.format_exc())
     except KeyboardInterrupt:
