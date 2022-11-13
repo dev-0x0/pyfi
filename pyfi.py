@@ -126,8 +126,6 @@ class Pyfi:
                     self.deauth_active = False
                 elif self.sniffer_active_event.is_set():
                     self.sniffer_active_event.clear()
-                #elif self.client_update_event.is_set():
-                #    self.client_update_event.clear()
                 else:
                     pass
 
@@ -174,7 +172,6 @@ class Pyfi:
         """
         Start sniffing for access points and any connected clients
         """
-        #event = self.sniffer_active_event if self.phase == 'AP' else self.client_update_event
 
         self.output("[+] Sniffing Access Points on all channels\n")
         self.output("[+] Press 's' to stop and show summary. 'q' to quit\n")
@@ -461,48 +458,6 @@ class Pyfi:
         with self.lock:
             self.ap_dict[access_point]['clients'].append(new_client)
 
-    # def sniff_clients(self, pkt):
-    #     """
-    #     addr1=destination, addr2=source, addr3=bssid
-    #     """
-    #
-    #     if not self.client_update_event.is_set():
-    #         return
-    #
-    #     # Go to correct channel
-    #     channel = str(self.target_ap['channel'])
-    #     go_to_chan = Popen(['iw', 'dev', 'wlan0', 'set', 'channel', channel], stdout=PIPE)
-    #     go_to_chan.communicate()
-    #
-    #     # IF right type of frame, and not involved in authentication
-    #     try:
-    #         if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):  # and not pkt.haslayer(EAPOL):
-    #             # Packet is a Data or Control Frame
-    #             if pkt.addr1 and pkt.addr2:
-    #
-    #                 # Get destination and source MAC addresses
-    #                 dst = pkt.addr1.upper()
-    #                 src = pkt.addr2.upper()
-    #
-    #                 # If the target AP is either source or destination, we know the other is a client
-    #                 if BROADCAST_ADDR not in (dst, src):
-    #                     if src == self.target_bssid and dst not in self.ap_clients:
-    #                         self.main_display.append("here 1\n")
-    #                         self.ap_clients.append(dst)
-    #                         self.main_display.append(f"[*] {dst}\t{self.get_vendor(dst)}\n")
-    #
-    #                     elif dst == self.target_bssid and src not in self.ap_clients:
-    #                         self.main_display.append("here 2\n")
-    #                         self.ap_clients.append(src)
-    #                         self.main_display.append(f"[*] {src}\t{self.get_vendor(src)}\n")
-    #
-    #     except Exception as e:
-    #         Utils.log_error_to_file(traceback.format_exc())
-    #         self.error(e)
-    #
-    #     except KeyboardInterrupt:
-    #         pass
-
     # TODO move to utils
     def get_vendor(self, bssid):
         try:
@@ -525,14 +480,12 @@ class Pyfi:
             if self.hop_channels.is_set():
                 for i in range(1, 14):
                     channel = i % limit
-                    # print(channel)
 
                     # using Popen instead of os.system here avoids superfluous
                     # output to the terminal from the iw command
                     # which at times can crash the program (I'm not sure why yet)
                     # Note: I don't seem to need to PIPE any outputs(stdout etc.) for this to work
 
-                    # print("{} - {}".format(conf.iface, type(conf.iface)))
                     p = Popen(["iw", "dev", iface, "set", "channel", str(channel)])
                     try:
                         # if event is cleared, pause channel hopping
@@ -555,17 +508,15 @@ class Pyfi:
     def check_exit(self):
         if not self.input_thread.is_alive():
             sleep(2)
-            #self.exit_application()
             raise KeyboardInterrupt
 
     def exit_application(self):
         try:
-            #self.output(f"\n[!!] Putting {self.iface} back into MANAGED mode...\n")
+            # self.output(f"\n[!!] Putting {self.iface} back into MANAGED mode...\n")
             if self.monitor_mode is not False:
                 stop_mon(self.iface)
             self.exit_curses()
             sleep(1)
-            #Popen(['reset']).communicate()
             sys.exit(0)
 
         except Exception as e:
