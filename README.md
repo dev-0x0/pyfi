@@ -4,6 +4,8 @@ Default operation:
 - Uses a curses terminal UI
 - Enumerates local wireless access points and clients
 
+![pyfi-enum](./img/pyfi-enum.png)
+
 Additional options:
 - Allow for targeted or blanket deauthentication of clients from the wireless network
 - This portion of the project is for education purposes only, in order to learn about
