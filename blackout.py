@@ -38,7 +38,7 @@ class INFO:
 
 class Blackout:
 
-    def __init__(self, args):
+    def __init__(self, interface, args):
 
         self.args = args
 
@@ -46,8 +46,8 @@ class Blackout:
         self.screen, self.window = start_curses()
 
         # Set scapy sniff interface
-        conf.iface = args.interface
-        self.iface = args.interface
+        conf.iface = interface
+        self.iface = interface
         self.monitor_mode = False
 
         # Compile list of vendors
@@ -651,7 +651,7 @@ if __name__ == "__main__":
     with open('log', 'w') as f:
         f.write('')
 
-    blackout = Blackout(args)
+    blackout = Blackout(iface, args)
 
     # Set the signal handler
     signal.signal(signal.SIGINT, blackout.signal_handler)

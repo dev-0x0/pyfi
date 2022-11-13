@@ -44,6 +44,7 @@ def get_wlan_interface():
         proc = Popen(['iwconfig'], stdout=PIPE, stderr=PIPE)
         output = [line.decode() for line in proc.communicate()]
         interfaces = [line.split(' ', 1)[0] for line in output if 'IEEE 802.11' in line]
+        log_error_to_file('\n'.join(interfaces))
 
         if len(interfaces) == 0:
             print("[!] Error: No Wireless interfaces found.")
