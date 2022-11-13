@@ -77,11 +77,8 @@ class Pyfi:
         self.input_thread = Thread(target=self.fetch_input)
         self.input_thread.daemon = True
 
-        self.ap_update_event = Event()
-        self.ap_update_event.set()
-
-        self.client_update_event = Event()
-        self.client_update_event.set()
+        self.sniffer_active_event = Event()
+        self.sniffer_active_event.set()
 
         # AP sniffer Thread
         self.sniff_ap_thread = Thread(
@@ -118,7 +115,7 @@ class Pyfi:
             user_input = chr(user_input)
 
             if user_input == 'q':
-                self.client_update_event.clear()
+                self.sniffer_active_event.clear()
                 self.deauth_active = False
                 sleep(1)
                 stop_mon(self.iface)
@@ -129,8 +126,8 @@ class Pyfi:
                 if self.deauth_active:
                     # Stop deauthentication
                     self.deauth_active = False
-                elif self.ap_update_event.is_set():
-                    self.ap_update_event.clear()
+                elif self.sniffer_active_event.is_set():
+                    self.sniffer_active_event.clear()
                 #elif self.client_update_event.is_set():
                 #    self.client_update_event.clear()
                 else:
@@ -179,7 +176,7 @@ class Pyfi:
         """
         Start sniffing for access points and any connected clients
         """
-        #event = self.ap_update_event if self.phase == 'AP' else self.client_update_event
+        #event = self.sniffer_active_event if self.phase == 'AP' else self.client_update_event
 
         self.output("[+] Sniffing Access Points on all channels\n")
         self.output("[+] Press 's' to stop and show summary. 'q' to quit\n")
@@ -190,7 +187,7 @@ class Pyfi:
 
         # Wait for user to end client sniffing phase
         # TODO: This seems very inelegant, fix this
-        while self.ap_update_event.is_set():
+        while self.sniffer_active_event.is_set():
             self.check_exit()
             pass
 
@@ -299,7 +296,7 @@ class Pyfi:
         create deauth packets and send them to the target AP
         """
         # Stop adding APs/Clients to ap_dict
-        self.client_update_event.clear()
+        self.sniffer_active_event.clear()
         sleep(2)
 
         self.deauth_active = True
@@ -403,7 +400,7 @@ class Pyfi:
         # Here scapy is going to check whether each sniffed packet
         # has particular 'layers' of encapsulation and act accordingly
 
-        if self.ap_update_event.is_set():
+        if self.sniffer_active_event.is_set():
             if pkt.haslayer(Dot11):
                 # Check for beacon frames or probe responses from AP's
                 if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
@@ -416,7 +413,7 @@ class Pyfi:
             sys.exit(0)
 
     def sniff_clients(self, pkt):
-        if self.client_update_event.is_set():
+        if self.sniffer_active_event.is_set():
             if pkt.haslayer(Dot11) and pkt.getlayer(Dot11).type in (1, 2):
                 # Packet is a Data or Control Frame
                 if pkt.addr1 and pkt.addr2:
@@ -561,7 +558,7 @@ class Pyfi:
         if not self.input_thread.is_alive():
             sleep(2)
             #self.exit_application()
-            raise Exception("[!] Exiting...")
+            raise KeyboardInterrupt
 
     def exit_application(self):
         try:

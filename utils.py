@@ -219,7 +219,7 @@ def service_control(action, service):
 
 def print_headers():
     # Column headings
-    return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR")
+    return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t::VENDOR\n" % ("::SSID", "::BSSID")
 
 
 def choice_string():
