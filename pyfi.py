@@ -251,7 +251,7 @@ class Pyfi:
             f"\nSelected Access Point [{self.target_id}]\n",
             f"\tssid:\t\t{self.ap_dict[self.target_ap]['ssid']}\n",
             f"\tbssid:\t\t{self.target_ap}\n",
-            f"\tchannel:\t\t{self.ap_dict[self.target_ap]['channel']}\n",
+            f"\tchannel:\t{self.ap_dict[self.target_ap]['channel']}\n",
             horizontal_rule(30)]
 
         for line in outputs:
@@ -358,7 +358,7 @@ class Pyfi:
             # deauth_pkt = dot11/Dot11Deauth() #RadioTap() / dot11 / Dot11Deauth(reason=7)
 
             # send it
-            # TODO: Use of a for loop for this is unconvential,
+            # TODO: Use of a for loop for this is unconventional,
             # instead use the count argument to set number of packets. However,
             # for now I found this to be more reliable.
             try:
@@ -367,7 +367,7 @@ class Pyfi:
                     for pkt in packets:
                         if not self.deauth_active:
                             break
-                        sendp(pkt, inter=0.1, count=1, iface=conf.iface)
+                        sendp(pkt, inter=self.args.delay, count=self.args.packets, iface=conf.iface)
 
             except KeyboardInterrupt:
                 pass
@@ -378,7 +378,7 @@ class Pyfi:
                 #self.exit_application()
                 #sys.exit(0)
 
-            self.output("[*] Deauthentication Complete\n")
+            self.output("\n[*] Deauthentication Complete\n")
             return
 
         except Exception as e:

@@ -17,16 +17,20 @@ def parse_args():
                         "--interface",
                         help="Specify wireless interface. Example: -i wlan0")
 
-    parser.add_argument("-c",
-                        "--channel",
-                        help="Specify channel. Example: -c 1")
+    # parser.add_argument("-c",
+    #                     "--channel",
+    #                     help="Specify channel. Example: -c 1")
 
     parser.add_argument("-d",
                         "--delay",
+                        dest="delay",
+                        default=0.1,
                         help="Specify delay between sending packets.")
 
     parser.add_argument("-p",
                         "--packets",
+                        dest="packets",
+                        default=1,
                         help="Specify number of packets to send to each device. Defaults to 1. Example: -p 2")
 
     parser.add_argument("--targeted",
