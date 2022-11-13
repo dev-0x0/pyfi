@@ -25,3 +25,9 @@ Doing so may result in legal ramifications.
 
 3. The performance of this tool relies on your hardware. 
 Some network cards or setups may not work, or may produce odd behaviour.
+
+## TODO:
+- Source most up-to-date vendor database. Find a way to keep it updated.
+- Incorporate all argparse parsed arguments from utils.py
+- Fix bug when quitting during sniffing phase
+- Add colours to UI
