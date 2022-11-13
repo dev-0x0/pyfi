@@ -8,7 +8,7 @@ Default operation:
 ![pyfi-enum](./img/pyfi-enum.png)
 
 Additional options:
-- Allow for targeted or blanket deauthentication of clients from specified wireless access point
+- Allow for targeted or blanket deauthentication of clients from a specified wireless access point
 - This portion of the project is for educational purposes only, in order to learn about
 WiFi vulnerabilites, and steps sometimes taken by malicious actors when performing
 MITM type attacks. Read the disclaimer below before using this tool.
