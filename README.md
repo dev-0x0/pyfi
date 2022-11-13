@@ -16,10 +16,10 @@ MITM)
 ### Technologies used:
 
 - Python3
-    - curses module for terminal UI
+    - curses module (built in module) for terminal UI
     - scapy module for packet capture, analysis and forging
     - Makes use of a custom class which implements a list that triggers actions when items are added or removed
-    - 
+  
 ### TODO:
 - Source most up-to-date vendor database. Find a way to keep it updated
 - Incorporate all argparse parsed arguments from utils.py
