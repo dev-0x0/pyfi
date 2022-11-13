@@ -98,9 +98,6 @@ class Pyfi:
         # A flag to indicate deauth is in progress
         self.deauth_active = False
 
-        # Indicates whether we are targetting an AP or Clients
-        self.phase = 'AP'
-
         # Flag indicating user is choosing deauth option
         self.choosing = False
 
