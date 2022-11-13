@@ -1,6 +1,7 @@
 
 from collections.abc import MutableSequence
 
+
 class TriggerList(MutableSequence):
     """This list can trigger a callback/handler function whenever its contents change"""
 
