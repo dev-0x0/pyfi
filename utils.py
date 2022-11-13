@@ -8,17 +8,6 @@ from time import sleep
 from subprocess import PIPE, Popen, check_output
 
 
-# class Colour:
-#     HEADER = '\033[95m'
-#     OKBLUE = '\033[94m'
-#     OKGREEN = '\033[92m'
-#     WARNING = '\033[93m'
-#     FAIL = '\033[91m'
-#     ENDC = '\033[0m'
-#     BOLD = '\033[1m'
-#     UNDERLINE = '\033[4m'
-
-
 def choice_string():
     choice_str = '\n'
     choice_str += "1) Deauthenticate ALL clients from AP\n"
@@ -28,123 +17,122 @@ def choice_string():
     return choice_str
 
 
-class Utils:
+def horizontal_rule(n):
+    return '\n' + '-' * n + '\n'
 
-    def __init__(self, iface):
 
-        self.iface = str(iface)
-        self.services = ['NetworkManager', 'wpa_supplicant']
+def self_mac(iface):
+    """
+    returns the mac address of your NIC or None
+    *not currently needed*
+    """
+    ifconfig = Popen(['ifconfig'], stdout=PIPE)
+    out = ifconfig.communicate()[0]
+    out = out[out.find(iface):]
+    pattern = r'(\w\w:?){6}'
+    try:
+        mac = re.search(pattern, out).group()
+    except AttributeError:
+        mac = "Unavailable"
+    return mac
 
-    @staticmethod
-    def horizontal_rule(n):
-        return '\n' + '-' * n + '\n'
 
-    def self_mac(self):
-        """
-        returns the mac address of your NIC or None
-        *not currently needed*
-        """
-        ifconfig = Popen(['ifconfig'], stdout=PIPE)
-        out = ifconfig.communicate()[0]
-        out = out[out.find(self.iface):]
-        pattern = r'(\w\w:?){6}'
-        try:
-            mac = re.search(pattern, out).group()
-        except AttributeError:
-            mac = "Unavailable"
-        return mac
+def get_mac(iface):
+    """
+    returns the mac address of your NIC or None
+    *not currently needed*
+    """
+    # call ifconfig and parse the output to find our iface
+    ifconfig = Popen(['ifconfig'], stdout=PIPE)
+    out = ifconfig.communicate()[0]
+    out = out[out.find(iface):]
 
-    def get_mac(self):
-        """
-        returns the mac address of your NIC or None
-        *not currently needed*
-        """
-        # call ifconfig and parse the output to find our iface
-        ifconfig = Popen(['ifconfig'], stdout=PIPE)
-        out = ifconfig.communicate()[0]
-        out = out[out.find(self.iface):]
+    # regex pattern to match a MAC address
+    pattern = r'ether ((\w\w:?){6})'
+    try:
+        mac = re.search(pattern, out).groups()[0]
+    except AttributeError:
+        mac = "Unavailable"
 
-        # regex pattern to match a MAC address
-        pattern = r'ether ((\w\w:?){6})'
-        try:
-            mac = re.search(pattern, out).groups()[0]
-        except AttributeError:
-            mac = "Unavailable"
+    return mac
 
-        return mac
 
-    def start_mon(self):
-        """
-        Put wireless network interface into monitor mode
-        """
+services = ['NetworkManager', 'wpa_supplicant']
 
-        try:
-            # Need to kill any processes that my change channels or put interface back into MANAGED mode
-            for service in self.services:
-                if self.service_is_active(service):
-                    self.service_control('stop', service)
 
-            # Ex: ip link set wlan0 down
-            iface_down = Popen(['ip', 'link', 'set', self.iface, 'down'])
-            sleep(2)
-            # Ex: iw wlan0 set monitor control
-            set_monitor_mode = Popen(['iw', self.iface, 'set', 'monitor', 'control'])
-            sleep(2)
-            # Ex: ip link set wlan0 up
-            iface_up = Popen(['ip', 'link', 'set', self.iface, 'up'])
-            sleep(2)
+def start_mon(iface):
+    """
+    Put wireless network interface into monitor mode
+    """
 
-            iface_down.communicate()
-            set_monitor_mode.communicate()
-            iface_up.communicate()
+    try:
+        # Need to kill any processes that my change channels or put interface back into MANAGED mode
+        for service in services:
+            if service_is_active(service):
+                service_control('stop', service)
 
-            return True
+        # Ex: ip link set wlan0 down
+        iface_down = Popen(['ip', 'link', 'set', iface, 'down'])
+        sleep(2)
+        # Ex: iw wlan0 set monitor control
+        set_monitor_mode = Popen(['iw', iface, 'set', 'monitor', 'control'])
+        sleep(2)
+        # Ex: ip link set wlan0 up
+        iface_up = Popen(['ip', 'link', 'set', iface, 'up'])
+        sleep(2)
 
-        except Exception as e:
-            Utils.log_error_to_file(traceback.format_exc())
-            return False
+        iface_down.communicate()
+        set_monitor_mode.communicate()
+        iface_up.communicate()
 
-    def stop_mon(self):
-        """
-        Put wireless network interface back into managed mode
-        """
-        try:
-            os.system(f"ifconfig {self.iface} down")
-            os.system(f"iw {self.iface} set type managed")
-            os.system(f"ifconfig {self.iface} up")
+        return True
 
-            # Restart any stopped services
-            for service in self.services:
-                self.service_control('start', service)
+    except Exception as e:
+        log_error_to_file(traceback.format_exc())
+        return False
 
-            return True
 
-        except Exception as e:
-            Utils.log_error_to_file(traceback.format_exc())
-            return False
+def stop_mon(iface):
+    """
+    Put wireless network interface back into managed mode
+    """
+    try:
+        os.system(f"ifconfig {iface} down")
+        os.system(f"iw {iface} set type managed")
+        os.system(f"ifconfig {iface} up")
 
-    @staticmethod
-    def service_is_active(self, service):
-        # Will exit with status zero if service is active, non-zero otherwise
-        return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
+        # Restart any stopped services
+        for service in services:
+            service_control('start', service)
 
-    @staticmethod
-    def service_control(self, action, service):
-        Popen(['systemctl', action, service]).communicate()
+        return True
 
-    @staticmethod
-    def print_headers():
-        # Column headings
-        return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR")
+    except Exception as e:
+        log_error_to_file(traceback.format_exc())
+        return False
 
-    @staticmethod
-    def compile_vendors():
-        with open('vendors.pickle', 'rb') as f:
-            # FORMAT -> {"XX:YY:ZZ": MANUFACTURER, "AA:BB:CC": MANUFACTURER, ... etc }
-            vendors = pickle.load(f)
-        return vendors
 
-    @staticmethod
-    def log_error_to_file(error):
-        with open('log', 'w') as f:
-            f.write(str(error) + '\n')
+def service_is_active(service):
+    # Will exit with status zero if service is active, non-zero otherwise
+    return check_output(['systemctl', 'is-active', '--quiet', service]) == 0
+
+
+def service_control(action, service):
+    Popen(['systemctl', action, service]).communicate()
+
+
+def print_headers():
+    # Column headings
+    return "\n::ID\t%-20s\t%-20s\t::CHANNEL\t\t%-20s\n" % ("::SSID", "::BSSID", "::VENDOR")
+
+
+def compile_vendors():
+    with open('vendors.pickle', 'rb') as f:
+        # FORMAT -> {"XX:YY:ZZ": MANUFACTURER, "AA:BB:CC": MANUFACTURER, ... etc }
+        vendors = pickle.load(f)
+    return vendors
+
+
+def log_error_to_file(error):
+    with open('log', 'w') as f:
+        f.write(str(error) + '\n')

