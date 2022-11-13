@@ -1,9 +1,8 @@
 #!/usr/bin/python3
 
 #  TODO: Source most up-to-date vendor database. Find a way to keep it updated.
-#  TODO: Use argparse for command-line options
-#       TODO: Allow option for number of deauth packets to send (EX: -c 100)
-#       TODO: Allow option for providing interface name
+#  TODO: Incorporate all argparse parsed arguments from utils.py
+#  TODO: Fix bug when quitting during sniffing phase
 
 import os
 import re
@@ -11,7 +10,6 @@ import sys
 import signal
 import curses
 import logging
-# import argparse
 import traceback
 from time import sleep
 from utils import *
