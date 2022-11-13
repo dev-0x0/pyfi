@@ -28,11 +28,10 @@ MITM)
 
 ### DISCLAIMER:
 
-1. This is a project I have created for educational purposes only.
+1. This is a project I have created for educational, research and proof-of-concept purposes only.
 The author does not condone or encourage malicious use of this tool.
-Do not use this tool to influence any wireless network unless you have
-full consent to do so from the owners and users of the network,
-with their full knowledge of the possible effects. You are responsible for being sure your actions are not breaking the law in your jurisdiction.
+Do not use this tool to influence any wireless networks or devices that you do not own.
+You are responsible for being sure that your actions are not breaking the law in your jurisdiction.
 
 2. Do not use this tool if you do not fully understand what it does.
 
