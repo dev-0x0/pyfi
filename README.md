@@ -7,11 +7,11 @@ Default operation:
 
 Additional options:
 - Allow for targeted or blanket deauthentication of clients from a specified wireless access point
-- This portion of the project is a proof-of-concept for demonstrating the vulnerability of some wireless networks. 
+- This portion of the project is a proof-of-concept for demonstrating the vulnerability of some wireless networks 
 - It is for educational purposes only, in order to learn about
 WiFi vulnerabilites, and steps sometimes taken by malicious actors when performing certain types of attacks(e.g.
-MITM). 
-- Read the disclaimer below before using this tool.
+MITM)
+- Read the disclaimer below before using this tool
 
 ### Technologies used:
 
@@ -20,7 +20,7 @@ MITM).
     - scapy module for packet capture, analysis and forging
 
 ### TODO:
-- Source most up-to-date vendor database. Find a way to keep it updated.
+- Source most up-to-date vendor database. Find a way to keep it updated
 - Incorporate all argparse parsed arguments from utils.py
 - Fix bug when quitting during sniffing phase
 - Add colours to UI
